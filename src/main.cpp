@@ -40,10 +40,10 @@
 
 #define S_WIDTH 640
 #define S_HEIGHT 480
-#define PIXEL_SCALE 4
-#define USE_TRACKER 1
+#define PIXEL_SCALE 1
+#define USE_TRACKER 0
 #define TIMER_LENGTH 4
-#define DRAW_CONE 1
+#define DRAW_CONE 0
 struct vtkRenderGroup
 {
 	vtkSmartPointer<vtkPolyData> polyData_;
@@ -176,12 +176,12 @@ void updatePolyData()
 				XnRGB24Pixel c = cameraDataVector[i].imageMap_[x+y*S_WIDTH];
 	
 				vtkIdType id;
-				if (d == 0)
+				if (d == 0 || d > 2000)/*(d == 0)*/
 				{
 					id = points->InsertNextPoint(x,y,4096*.3);
 					color->InsertNextTuple3(0,0,0);
 				}
-				else
+				else  
 				{
 					id = points->InsertNextPoint(x*PIXEL_SCALE,y*PIXEL_SCALE,d*.3);
 					color->InsertNextTuple3(c.nRed, c.nGreen, c.nBlue);
@@ -214,10 +214,11 @@ class UpdateData:public vtkCommand
 			//polyData->Initialize();
 			//devMan->GetCameraDataByDeviceIndex(0, &dataPacket);
 			//inputInteractor->Update();
-		   if (USE_TRACKER)
+		    if (USE_TRACKER)
 				inputInteractor->Update(); 
 		 	devMan->GetCameraDataForAllDevices(cameraDataVector);
-			updatePolyData();   
+			updatePolyData();  
+			inputInteractor->Update(); 
 			renwin->Render();
 		}
 };
@@ -417,15 +418,21 @@ int main(int argc, char** argv)
 	
 	//
 
-	//Set up camera
-	//ren->ResetCamera();
-	//ren->GetActiveCamera()->Roll(180.0);
-	//ren->GetActiveCamera()->Azimuth(180.0);
-	//ren->GetActiveCamera()->Zoom(2.0);
+	
 	devMan->GetCameraDataForAllDevices(cameraDataVector);
 	updatePolyData();
 	if (USE_TRACKER)
 			initializeTracker(); 
+	else
+	{
+		//Set up camera
+	ren->ResetCamera();
+	ren->GetActiveCamera()->Roll(180.0);
+	ren->GetActiveCamera()->Azimuth(180.0);
+	ren->GetActiveCamera()->Zoom(2.0);
+	double* position = ren->GetActiveCamera()->GetPosition();
+	initializeTracker();
+	}
 	    /*if (USE_TRACKER)
 			initializeTracker();
 		else
