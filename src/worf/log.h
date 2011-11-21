@@ -13,6 +13,6 @@
 
 extern void put_log(int level, const char *format, ...);
 
-#define put_flog(l, fmt, ...) put_log(l, "%s: " fmt, __PRETTY_FUNCTION__, ##__VA_ARGS__)
+//#define put_flog(l, fmt, ...) put_log(l, "%s: " fmt, __PRETTY_FUNCTION__, ##__VA_ARGS__)
 
 #endif

@@ -4,6 +4,14 @@
 #include "log.h"
 #include <math.h>
 
+//#include "WinDef.h"
+#include <windows.h> 
+	#ifndef CALLBACK
+	#define CALLBACK
+	#endif
+#ifndef M_PI
+	#define M_PI 3.14159265358979323846
+	#endif
 #ifdef __APPLE__
     #include <OpenGL/gl.h>
     #include <OpenGL/glu.h>
@@ -11,10 +19,9 @@
     #include <GL/gl.h>
     #include <GL/glu.h>
 #endif
-
 WorfCamera::WorfCamera()
 {
-    put_flog(LOG_DEBUG, "");
+   // put_flog(LOG_DEBUG, "");
 
     // default settings
     mode_ = perspective;
@@ -51,8 +58,8 @@ void WorfCamera::setView(int width, int height)
 
     if(mode_ == perspective)
     {
-        double near = NEAR_CLIPPING_FACTOR * unitLength_;
-        double far = FAR_CLIPPING_FACTOR * unitLength_;
+        double nearVal = NEAR_CLIPPING_FACTOR * unitLength_;
+        double farVal = FAR_CLIPPING_FACTOR * unitLength_;
 
         // which aspect to use: automatic calculated or manually set
         double aspect = (double)height / (double)width;
@@ -62,15 +69,15 @@ void WorfCamera::setView(int width, int height)
 
         double winFovY = fovY_ * aspect;
 
-        double top = tan(0.5 * winFovY * M_PI/180.) * near;
+        double top = tan(0.5 * winFovY * M_PI/180.) * nearVal;
         double bottom = -top;
         double left = 1./aspect * bottom;
         double right = 1./aspect * top;
 
-        glFrustum(left + x1_ * (right-left), left + x2_ * (right-left), bottom + y1_ * (top-bottom), bottom + y2_ * (top-bottom), near, far);
+        glFrustum(left + x1_ * (right-left),left + x2_ * (right-left), bottom + y1_ * (top-bottom), bottom + y2_ * (top-bottom), nearVal, farVal);
 
         //  the glFrustum() call is equivalent to this gluPerspective()
-        // gluPerspective(45.0 * (GLdouble)height/(GLdouble)width, (GLdouble)width/(GLdouble)height, near, far);
+        // gluPerspective(45.0 * (GLdouble)height/(GLdouble)width, (GLdouble)width/(GLdouble)height, nearVal, farVal);
     }
     else if(mode_ == orthographic)
     {

@@ -26,11 +26,12 @@ void SensorDevice::AlignSensors()
 
 int SensorDevice::SetRGBCameraResolution(unsigned int x, unsigned int y)
 {
-    
+    return 0;
 }
 
 int SensorDevice::SetDepthCameraResolution(unsigned int x, unsigned int y)
 {
+    return 0;
 
 }
 

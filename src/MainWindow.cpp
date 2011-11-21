@@ -4,5 +4,5 @@
 
 MainWindow::MainWindow(): WorfQtMainWindow("KinectArray")
 {
-    put_flog(LOG_DEBUG, "");
+   // put_flog(LOG_DEBUG, "");
 }

@@ -3,7 +3,8 @@
 #include "log.h"
 #include <QtGui>
 #include <QtOpenGL>
-
+//Need to include  <algorithm> for std::find() to compile 
+#include <algorithm>
 std::vector<WorfQtGLWindow *> WorfQtGLWindow::windows_;
 
 WorfQtGLWindow * WorfQtGLWindow::currentWindow_;
@@ -26,8 +27,8 @@ WorfQtGLWindow::WorfQtGLWindow() : QGLWidget(QGLFormat(QGL::SampleBuffers))
 
 WorfQtGLWindow::~WorfQtGLWindow()
 {
-    // erase this object from the windows vector
-    windows_.erase(std::find (windows_.begin(), windows_.end(), this));
+    // erase this object from the windows vector 
+    windows_.erase(std::find(windows_.begin(), windows_.end(), this));
 
     // if this was the current window, change it to NULL
     if(currentWindow_ == this)
@@ -110,7 +111,7 @@ void WorfQtGLWindow::mouseMoveEvent(QMouseEvent *event)
 
 void WorfQtGLWindow::setDisplayFunction(void (*function)(void))
 {
-    put_flog(LOG_DEBUG, "updated display function");
+   // put_flog(LOG_DEBUG, "updated display function");
     display = function;
 }
 
