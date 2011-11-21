@@ -32,11 +32,18 @@
 #include <vtkMatrix4x4.h>
 #include <vtkMath.h>
 
+#include "vtkConeSource.h"
+#include "vtkSphereSource.h"
+#include "vtkPolyDataMapper.h"
+#include "vtkActor.h" 
+#include "vtkTransform.h"
 
 #define S_WIDTH 640
 #define S_HEIGHT 480
 #define PIXEL_SCALE 4
-#define USE_TRACKER 0
+#define USE_TRACKER 1
+#define TIMER_LENGTH 4
+#define DRAW_CONE 1
 struct vtkRenderGroup
 {
 	vtkSmartPointer<vtkPolyData> polyData_;
@@ -68,8 +75,9 @@ vtkSmartPointer<vtkRenderWindow> renwin;
   vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera1;
 
 	 
-
-
+bool first = true;
+vtkActor* ConeActor;
+vtkConeSource* Cone;
 /**
 	Function Declaration
 */
@@ -81,7 +89,61 @@ void timerCallback();
 
 void updatePolyData()
 {
+	if (DRAW_CONE)
+	{
+	if (first)
+	{
+		double position[3] = {0, 0, 0};
 
+	//	double position[3] = {-0.000033, -0.065609, -0.087861};
+	//double quat[4] = { -0.205897 ,-0.050476, -0.227901 , 0.950326};
+	//    double  matrix[3][3];
+	//	double orientNew[3] ;
+	//	  
+	//	vtkMatrix4x4* cameraLightTransformMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
+	//	cameraLightTransformMatrix->MultiplyPoint(position,position); 
+	//	// Update Object Orientation
+
+	//	//Change transform quaternion to matrix
+	//	vtkMath::QuaternionToMatrix3x3(quat, matrix); 
+	//	vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+	//	RotationMatrix->SetElement(0,0, matrix[0][0]);
+	//	RotationMatrix->SetElement(0,1, matrix[0][1]);
+	//	RotationMatrix->SetElement(0,2, matrix[0][2]); 
+	//	RotationMatrix->SetElement(0,3, 0.0); 
+	//	
+	//	RotationMatrix->SetElement(1,0, matrix[1][0]);
+	//	RotationMatrix->SetElement(1,1, matrix[1][1]);
+	//	RotationMatrix->SetElement(1,2, matrix[1][2]); 
+	//	RotationMatrix->SetElement(1,3, 0.0); 
+	//	
+	//	RotationMatrix->SetElement(2,0, matrix[2][0]);
+	//	RotationMatrix->SetElement(2,1, matrix[2][1]);
+	//	RotationMatrix->SetElement(2,2, matrix[2][2]); 
+	//	RotationMatrix->SetElement(2,3, 1.0); 
+
+	//	//cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
+	//	vtkTransform::GetOrientation(orientNew,RotationMatrix); 
+
+	// ConeSource
+    Cone = vtkConeSource::New();
+	Cone->SetRadius(0.05);
+	Cone->SetHeight(0.1);  
+	//Cone->SetDirection(orientNew); 
+
+	//Cone Mapper
+    vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
+	ConeMapper->SetInput(Cone->GetOutput());
+    
+	ConeActor = vtkActor::New();
+    ConeActor->SetMapper(ConeMapper); 
+	ConeActor->SetPosition(position);   
+	renwin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
+	first = false;
+	}
+	}
+	else
+	{
 	for(unsigned int i = 0; i < cameraDataVector.size(); i++)
 	{
 	
@@ -136,7 +198,7 @@ void updatePolyData()
 		renderGroups[i].polyData_->Modified();
 		renderGroups[i].polyData_->Update();
 	}
-
+}
 }
 
 class UpdateData:public vtkCommand
@@ -172,9 +234,9 @@ void initializeTracker()
 	useTracker = 1;
 	trackerAddress =  "tracker@localhost";//"Tracker0@tracker1-cs.cs.unc.edu";
 
-	trackerOrigin[0] =  7.88;
-	trackerOrigin[1] =  5.193477;
-	trackerOrigin[2] =  1.04;
+	trackerOrigin[0] =  -7.88;
+	trackerOrigin[1] =  -5.193477;
+	trackerOrigin[2] =  -1.04;
 	sensorIndex = 1; 
 	origSensorIndex = 1;
  
@@ -264,7 +326,7 @@ void initializeEyeAngle()
 		double O2Left   = - DisplayOrigin[0];
 		double O2Top    =   DisplayY[1];
 		double O2Bottom = - DisplayX[1]; 
-		camera->SetConfigParams(O2Screen,O2Right,O2Left,O2Top,O2Bottom, 0.065  ,1.0/*renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetDistance()/O2Screen*/,SurfaceRot); 
+		camera->SetConfigParams(O2Screen,O2Right,O2Left,O2Top,O2Bottom, 0.065  ,renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetDistance()/O2Screen,SurfaceRot); 
 		SurfaceRot->Delete(); 
 		 
 }
@@ -312,8 +374,8 @@ void initializeDevices()
 		inputInteractor->AddInteractionDevice(tracker1);
 		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1); 
    
-	 devMan->GetCameraDataForAllDevices(cameraDataVector);
-	updatePolyData(); 
+	/* devMan->GetCameraDataForAllDevices(cameraDataVector);
+	updatePolyData(); */
 	  
    /* connect(VRPNTimer,SIGNAL(timeout()),
 		 this,SLOT(timerCallback()));
@@ -350,7 +412,7 @@ int main(int argc, char** argv)
 	//Add timer callback
 	vtkSmartPointer<UpdateData> updateCallback = vtkSmartPointer<UpdateData>::New();
 	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
-	iren->CreateRepeatingTimer(100);
+	iren->CreateRepeatingTimer(TIMER_LENGTH);
 
 	
 	//
@@ -360,13 +422,17 @@ int main(int argc, char** argv)
 	//ren->GetActiveCamera()->Roll(180.0);
 	//ren->GetActiveCamera()->Azimuth(180.0);
 	//ren->GetActiveCamera()->Zoom(2.0);
-	    if (USE_TRACKER)
+	devMan->GetCameraDataForAllDevices(cameraDataVector);
+	updatePolyData();
+	if (USE_TRACKER)
+			initializeTracker(); 
+	    /*if (USE_TRACKER)
 			initializeTracker();
 		else
 		{ 
 			devMan->GetCameraDataForAllDevices(cameraDataVector);
 			updatePolyData();
-		}
+		}*/
 	iren->Start();
 
 
