@@ -36,9 +36,17 @@
 
 #include "vtkConeSource.h"
 #include "vtkSphereSource.h"
+
+#include "vtkCubeSource.h" 
+
 #include "vtkPolyDataMapper.h"
 #include "vtkActor.h" 
 #include "vtkTransform.h"
+
+#include "vtkProperty.h"
+
+#include "vtkLight.h"
+#include "vtkLightKit.h"
 
 #define S_WIDTH 640
 #define S_HEIGHT 480
@@ -50,7 +58,7 @@
 
 #define DRAW_CONE 1
 
-#define DRAW_KINECT 1
+#define DRAW_KINECT 0
 
 
 #define CULL_DEPTH 0
@@ -84,15 +92,23 @@ vtkRenderWindow* datawin  ;
 	bool first = true;
 	vtkActor* ConeActor;
 	vtkConeSource* Cone;
+	vtkActor* CubeActor;
+	vtkCubeSource* CubeSource;
 
 	vtkMatrix4x4* kinectTransform;
+
+	vtkLight* MainLight;
+	vtkLightKit* LightKit;
 
 /**
 	Function Declaration
 */
+void initializeLights();
+
 void initializeTracker();
 void initializeEyeAngle(vtkCamera* camera);
 void initializeDevices();
+
 void updatePolyData();
 void timerCallback();
 
@@ -101,109 +117,71 @@ void updatePolyData()
 {
 	if (DRAW_CONE )
 	{
-	if (first)
-	{
-		 double position[3] = {0, 0, 0}; 
-		//double position[3] = {-0.000033, -0.065609, -0.087861};
-	//double quat[4] = { -0.205897 ,-0.050476, -0.227901 , 0.950326};
-	    double  matrix[3][3];
-		double orientNew[3] ;
-		  
-	/*	vtkMatrix4x4* cameraLightTransformMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
-		cameraLightTransformMatrix->MultiplyPoint(position,position); */
-		// Update Object Orientation
-
-		//Change transform quaternion to matrix
-		//vtkMath::QuaternionToMatrix3x3(quat, matrix); 
-		//vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
-		//RotationMatrix->SetElement(0,0, matrix[0][0]);
-		//RotationMatrix->SetElement(0,1, matrix[0][1]);
-		//RotationMatrix->SetElement(0,2, matrix[0][2]); 
-		//RotationMatrix->SetElement(0,3, 0.0); 
-		//
-		//RotationMatrix->SetElement(1,0, matrix[1][0]);
-		//RotationMatrix->SetElement(1,1, matrix[1][1]);
-		//RotationMatrix->SetElement(1,2, matrix[1][2]); 
-		//RotationMatrix->SetElement(1,3, 0.0); 
-		//
-		//RotationMatrix->SetElement(2,0, matrix[2][0]);
-		//RotationMatrix->SetElement(2,1, matrix[2][1]);
-		//RotationMatrix->SetElement(2,2, matrix[2][2]); 
-		//RotationMatrix->SetElement(2,3, 1.0); 
-
-		////cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
-		//vtkTransform::GetOrientation(orientNew,RotationMatrix); 
-
-	// ConeSource
-    Cone = vtkConeSource::New();
-	Cone->SetRadius(0.5);
-	Cone->SetHeight( 1.0);  
-	//Cone->SetDirection(orientNew); 
-
-	//Cone Mapper
-    vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
-	ConeMapper->SetInput(Cone->GetOutput());
-    
-	ConeActor = vtkActor::New();
-    ConeActor->SetMapper(ConeMapper); 
-	ConeActor->SetPosition(position);   
-	datawin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
-	first = false;
-	}
-	else if (TRACKER_UPDATE_CONE_POS)
-	{
-		double* position = (double*)malloc(sizeof(double)*3);
-		position = tracker1->GetPosition();
-		double newPosition[3];
-		//Scale up position. TODO: Determine how much to scale between phantom position and world position
-		for (int s = 0; s<3;s++)
+		if (first)
 		{
-			newPosition[s]=position[s];
-		}
+			 double position[3] = {0, 0, 0}; 
+			//double position[3] = {-0.000033, -0.065609, -0.087861};
+			//double quat[4] = { -0.205897 ,-0.050476, -0.227901 , 0.950326};
+			double  matrix[3][3];
+			double orientNew[3] ;
+			  
+	/*	   vtkMatrix4x4* cameraLightTransformMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
+			cameraLightTransformMatrix->MultiplyPoint(position,position); */
+			// Update Object Orientation
 
-		double orientNew[3];
-		double matrix[3][3];
+			//Change transform quaternion to matrix
+			//vtkMath::QuaternionToMatrix3x3(quat, matrix); 
+			//vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+			//RotationMatrix->SetElement(0,0, matrix[0][0]);
+			//RotationMatrix->SetElement(0,1, matrix[0][1]);
+			//RotationMatrix->SetElement(0,2, matrix[0][2]); 
+			//RotationMatrix->SetElement(0,3, 0.0); 
+			//
+			//RotationMatrix->SetElement(1,0, matrix[1][0]);
+			//RotationMatrix->SetElement(1,1, matrix[1][1]);
+			//RotationMatrix->SetElement(1,2, matrix[1][2]); 
+			//RotationMatrix->SetElement(1,3, 0.0); 
+			//
+			//RotationMatrix->SetElement(2,0, matrix[2][0]);
+			//RotationMatrix->SetElement(2,1, matrix[2][1]);
+			//RotationMatrix->SetElement(2,2, matrix[2][2]); 
+			//RotationMatrix->SetElement(2,3, 1.0); 
+
+			////cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
+			//vtkTransform::GetOrientation(orientNew,RotationMatrix); 
+
+		//// ConeSource
+		//Cone = vtkConeSource::New();
+		//Cone->SetRadius(0.5);
+		//Cone->SetHeight( 1.0);  
+		////Cone->SetDirection(orientNew); 
+
+		////Cone Mapper
+		//vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
+		//ConeMapper->SetInput(Cone->GetOutput());
+	 //   
+		//ConeActor = vtkActor::New();
+		//ConeActor->SetMapper(ConeMapper); 
+		//ConeActor->SetPosition(position);   
+		//datawin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
+
+			 
+		CubeSource = vtkCubeSource::New(); 
+		//Cone->SetDirection(orientNew); 
+
+		//Cone Mapper
+		vtkPolyDataMapper* CubeMapper = vtkPolyDataMapper::New();
+		CubeMapper->SetInput(CubeSource->GetOutput());
+	    
+		CubeActor = vtkActor::New();
+		CubeActor->SetMapper(CubeMapper); 
+		CubeActor->SetPosition(position);    
+  
+		datawin->GetRenderers()->GetFirstRenderer()->AddActor(CubeActor); 
+		datawin->GetRenderers()->GetFirstRenderer()->ResetCamera();
+		first = false;
+		}
 	 
-		// Update Object Orientation
-
-		//Change transform quaternion to matrix
-		vtkMath::QuaternionToMatrix3x3(tracker1->GetRotation(), matrix); 
-		vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
-		RotationMatrix->SetElement(0,0, matrix[0][0]);
-		RotationMatrix->SetElement(0,1, matrix[0][1]);
-		RotationMatrix->SetElement(0,2, matrix[0][2]); 
-		RotationMatrix->SetElement(0,3, 0.0); 
-		
-		RotationMatrix->SetElement(1,0, matrix[1][0]);
-		RotationMatrix->SetElement(1,1, matrix[1][1]);
-		RotationMatrix->SetElement(1,2, matrix[1][2]); 
-		RotationMatrix->SetElement(1,3, 0.0); 
-		
-		RotationMatrix->SetElement(2,0, matrix[2][0]);
-		RotationMatrix->SetElement(2,1, matrix[2][1]);
-		RotationMatrix->SetElement(2,2, matrix[2][2]); 
-		RotationMatrix->SetElement(2,3, 1.0); 
-		vtkTransform::GetOrientation(orientNew,RotationMatrix);
-		ConeActor->SetOrientation(orientNew); 
-
-		double normalizedOrientNew= vtkMath::Norm(orientNew);
-		for (int i =0; i < 3; i++)
-		{
-			newPosition[i] = newPosition[i] -(Cone->GetHeight()/2.0)* (orientNew[i]/normalizedOrientNew);
-		}
-		ConeActor->SetPosition(newPosition);
-		double* cameraposition ;
-		cameraposition = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetPosition( );
-		 
-	}
-	else
-	{
-		ConeActor->Modified();
-		bool headtracked ;
-		headtracked = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetHeadTracked();
-		vtkMatrix4x4* viewMatrix ;
-		viewMatrix = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetViewTransformMatrix();
-	}
 	}
 	if (DRAW_KINECT)
 	{
@@ -328,6 +306,18 @@ void timerCallback()
 	devMan->GetCameraDataForAllDevices(cameraDataVector);
 	updatePolyData(); 
 	inputInteractor->Update(); 
+}
+
+void initializeLights()
+{
+  //MainLight = vtkLight::New();
+  //MainLight->SetAmbientColor(1, 1, 1);
+  //MainLight->SetSpecularColor(1, 1, 1);
+  //MainLight->SetDiffuseColor(1, 1, 1);
+  //MainLight->SetIntensity(1.0);
+  //MainLight->SetLightType(2); // CameraLight
+  LightKit = vtkLightKit::New();
+  LightKit->AddLightsToRenderer(datawin->GetRenderers()->GetFirstRenderer());
 }
 void initializeTracker()
 {
@@ -507,6 +497,9 @@ int main(int argc, char** argv)
 	{
 		renwin->SetStereoCapableWindow(1);
 		renwin->StereoRenderOn();
+		
+		datawin->SetStereoCapableWindow(1);
+		datawin->StereoRenderOn();
 	}
 	renwin->AddRenderer(ren);
 	renwin->SetInteractor(iren);
@@ -523,6 +516,7 @@ int main(int argc, char** argv)
 	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
 	iren->CreateRepeatingTimer(TIMER_LENGTH); 
 	
+	initializeLights();
 	devMan->GetCameraDataForAllDevices(cameraDataVector); 
 	updatePolyData(); 
 
