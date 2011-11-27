@@ -56,10 +56,10 @@
 #define TRACKER_UPDATE_CONE_POS 0
 #define TIMER_LENGTH 4
 
-#define DRAW_CONE 1
+#define DRAW_CUBE 1
 
-#define DRAW_KINECT 0
-
+#define DRAW_KINECT 1
+#define USE_PHANTOM 0
 
 #define CULL_DEPTH 0
 #define KINECT_SET_STEREO_ON 1
@@ -115,12 +115,9 @@ void timerCallback();
  
 void updatePolyData()
 {
-	if (DRAW_CONE )
+	if (USE_PHANTOM)
 	{
-		if (first)
-		{
-			 double position[3] = {0, 0, 0}; 
-			//double position[3] = {-0.000033, -0.065609, -0.087861};
+		//double position[3] = {-0.000033, -0.065609, -0.087861};
 			//double quat[4] = { -0.205897 ,-0.050476, -0.227901 , 0.950326};
 			double  matrix[3][3];
 			double orientNew[3] ;
@@ -164,22 +161,26 @@ void updatePolyData()
 		//ConeActor->SetMapper(ConeMapper); 
 		//ConeActor->SetPosition(position);   
 		//datawin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
+	}
+	if (DRAW_CUBE )
+	{
+		if (first)
+		{
+			 double position[3] = {0, 0, 0};  
+			CubeSource = vtkCubeSource::New(); 
+			//Cone->SetDirection(orientNew); 
 
-			 
-		CubeSource = vtkCubeSource::New(); 
-		//Cone->SetDirection(orientNew); 
-
-		//Cone Mapper
-		vtkPolyDataMapper* CubeMapper = vtkPolyDataMapper::New();
-		CubeMapper->SetInput(CubeSource->GetOutput());
-	    
-		CubeActor = vtkActor::New();
-		CubeActor->SetMapper(CubeMapper); 
-		CubeActor->SetPosition(position);    
-  
-		datawin->GetRenderers()->GetFirstRenderer()->AddActor(CubeActor); 
-		datawin->GetRenderers()->GetFirstRenderer()->ResetCamera();
-		first = false;
+			//Cone Mapper
+			vtkPolyDataMapper* CubeMapper = vtkPolyDataMapper::New();
+			CubeMapper->SetInput(CubeSource->GetOutput());
+		    
+			CubeActor = vtkActor::New();
+			CubeActor->SetMapper(CubeMapper); 
+			CubeActor->SetPosition(position);    
+	  
+			datawin->GetRenderers()->GetFirstRenderer()->AddActor(CubeActor); 
+			datawin->GetRenderers()->GetFirstRenderer()->ResetCamera();
+			first = false;
 		}
 	 
 	}
@@ -309,13 +310,7 @@ void timerCallback()
 }
 
 void initializeLights()
-{
-  //MainLight = vtkLight::New();
-  //MainLight->SetAmbientColor(1, 1, 1);
-  //MainLight->SetSpecularColor(1, 1, 1);
-  //MainLight->SetDiffuseColor(1, 1, 1);
-  //MainLight->SetIntensity(1.0);
-  //MainLight->SetLightType(2); // CameraLight
+{ 
   LightKit = vtkLightKit::New();
   LightKit->AddLightsToRenderer(datawin->GetRenderers()->GetFirstRenderer());
 }
@@ -325,12 +320,13 @@ void initializeTracker()
 	useTracker = 1;
 
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
-	trackerAddress =  "tracker@localhost";//"Tracker0@tracker1-cs.cs.unc.edu";
+	trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";//"tracker@localhost";//
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
-	trackerOrigin[0] =  -7.51;
-	trackerOrigin[1] =  -5.16;
-	trackerOrigin[2] =  -0.99;
+	trackerOrigin[0] =  -7.89;
+	trackerOrigin[1] =  -5.19;
+	trackerOrigin[2] =  -1.06
+		;
 	sensorIndex = 0; 
 	origSensorIndex = 0;
  
@@ -543,11 +539,8 @@ int main(int argc, char** argv)
 	 
 	
 	if (USE_TRACKER)
-			initializeTracker();   
-	/*iren->Start();
-	data_iren->Start();*/
- 
-//	  // Start interacting
+			initializeTracker();    	  
+	// Continue  interacting
   MSG msg;
     while (1) {
         PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
