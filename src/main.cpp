@@ -48,7 +48,10 @@
 #define TRACKER_UPDATE_CONE_POS 0
 #define TIMER_LENGTH 4
 
-#define DRAW_CONE 0
+#define DRAW_CONE 1
+
+#define DRAW_KINECT 1
+
 
 #define CULL_DEPTH 0
 #define KINECT_SET_STEREO_ON 1
@@ -62,41 +65,33 @@ struct vtkRenderGroup
 DeviceManager* devMan;
 std::vector<CameraDataPacket> cameraDataVector;
 std::vector<vtkRenderGroup> renderGroups;
-vtkSmartPointer<vtkRenderWindow> renwin;
-
-//vtkRenderWindow*  renwin;
-//vtkRenderer* renderer1;
-
-
-
+vtkRenderWindow* renwin  ;
+vtkRenderWindow* datawin  ;
 // Headtracking
   int useTracker;
   const char* trackerAddress;
   double trackerOrigin[3];
   int sensorIndex;
-  int origSensorIndex; 
-  //QTimer *VRPNTimer;
+  int origSensorIndex;  
   //inputInteractor 
   vtkDeviceInteractor* inputInteractor;
 
   //Need to reset renderer to handle load state
   vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera1;
-  vtkVRPNTrackerCustomSensor* tracker1;
-  //Need to reset renderer to handle load state
-  //vtkVRPNTrackerStyleCamera*  trackerStyleCamera1;
-  //vtkVRPNTracker* tracker1;
+  vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera2;
+  vtkVRPNTrackerCustomSensor* tracker1; 
 	 
-bool first = true;
-vtkActor* ConeActor;
-vtkConeSource* Cone;
+	bool first = true;
+	vtkActor* ConeActor;
+	vtkConeSource* Cone;
 
-vtkMatrix4x4* kinectTransform;
+	vtkMatrix4x4* kinectTransform;
 
 /**
 	Function Declaration
 */
 void initializeTracker();
-void initializeEyeAngle();
+void initializeEyeAngle(vtkCamera* camera);
 void initializeDevices();
 void updatePolyData();
 void timerCallback();
@@ -152,7 +147,7 @@ void updatePolyData()
 	ConeActor = vtkActor::New();
     ConeActor->SetMapper(ConeMapper); 
 	ConeActor->SetPosition(position);   
-	renwin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
+	datawin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
 	first = false;
 	}
 	else if (TRACKER_UPDATE_CONE_POS)
@@ -168,8 +163,7 @@ void updatePolyData()
 
 		double orientNew[3];
 		double matrix[3][3];
-	/*	vtkMatrix4x4* cameraLightTransformMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
-		cameraLightTransformMatrix->MultiplyPoint(newPosition,newPosition); */
+	 
 		// Update Object Orientation
 
 		//Change transform quaternion to matrix
@@ -199,19 +193,19 @@ void updatePolyData()
 		}
 		ConeActor->SetPosition(newPosition);
 		double* cameraposition ;
-		cameraposition = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetPosition( );
+		cameraposition = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetPosition( );
 		 
 	}
 	else
 	{
 		ConeActor->Modified();
 		bool headtracked ;
-		headtracked = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetHeadTracked();
+		headtracked = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetHeadTracked();
 		vtkMatrix4x4* viewMatrix ;
-		viewMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetViewTransformMatrix();
+		viewMatrix = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetViewTransformMatrix();
 	}
 	}
-	else
+	if (DRAW_KINECT)
 	{
 	for(unsigned int i = 0; i < cameraDataVector.size(); i++)
 	{
@@ -317,18 +311,15 @@ class UpdateData:public vtkCommand
 			return up;
 		}
 		virtual void Execute(vtkObject* caller, unsigned long eid, void* clientdata)
-		{
-			//polyData->Initialize();
-			//devMan->GetCameraDataByDeviceIndex(0, &dataPacket);
-			//inputInteractor->Update();
+		{ 
 		    if (USE_TRACKER)
 			{
 				inputInteractor->Update(); 
 			}
 		 	devMan->GetCameraDataForAllDevices(cameraDataVector);
-			updatePolyData();  
-			//inputInteractor->Update(); 
+			updatePolyData();   
 			renwin->Render();
+			datawin->Render();
 		}
 };
 
@@ -353,12 +344,13 @@ void initializeTracker()
 	sensorIndex = 0; 
 	origSensorIndex = 0;
  
-	initializeEyeAngle();
-	initializeDevices();
+	initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	initializeDevices( ); 
 }
-void initializeEyeAngle()
+void initializeEyeAngle(vtkCamera* camera)
 {      
-	vtkCamera* camera = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+	
 		camera->SetEyeAngle(0);
 		camera->SetHeadTracked(true);//useTracker);
 
@@ -442,66 +434,9 @@ void initializeEyeAngle()
 		camera->SetConfigParams(O2Screen,O2Right,O2Left,O2Top,O2Bottom, 0.065  ,6.69/O2Screen/*renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetDistance()/O2Screen*/,SurfaceRot); 
 		SurfaceRot->Delete(); 
 		 
-}
-//void initializeDevices()
-//{ 
-//   
-//	  
-//
-//	/////////////////////////INTERACTOR////////////////////////////
-//	// Initialize Device Interactor to manage all trackers
-//    inputInteractor = vtkDeviceInteractor::New();
-//		/////////////////////////CREATE  TRACKER////////////////////////////
-//
-//		//Create connection to VRPN Tracker using vtkInteractionDevice.lib
-//		tracker1 = vtkVRPNTracker::New();
-//		tracker1->SetDeviceName(trackerAddress); 
-//		//tracker1->SetSensorIndex(sensorIndex);//TODO: Fix error handling  
-//		tracker1->SetTracker2WorldTranslation(trackerOrigin[0],trackerOrigin[1],trackerOrigin[2]);
-//		double t2w1[3][3] = { 0, -1,  0,
-//							  0,  0, 1, 
-//							 -1, 0,  0 }; 
-//		double t2wQuat1[4];
-//		vtkMath::Matrix3x3ToQuaternion(t2w1, t2wQuat1);
-//		tracker1->SetTracker2WorldRotation(t2wQuat1);
-//		
-//
-//		int trackerInitResult = tracker1->Initialize();
-//		if (trackerInitResult == 0)
-//		{
-//			printf("Error initializing tracker ");			 
-//		}
-//
-//		/////////////////////////CREATE  TRACKER STYLE////////////////////////////
-//
-//		//Create device interactor style (defined in vtkInteractionDevice.lib) that determines how the device manipulates camera viewpoint
-//		trackerStyleCamera1 = vtkVRPNTrackerStyleCamera::New();
-//		trackerStyleCamera1->SetTracker(tracker1);
-//		trackerStyleCamera1->SetRenderer(renwin->GetRenderers()->GetFirstRenderer());
-//	
-//		/////////////////////////INTERACTOR////////////////////////////
-//		//Register Tracker to Device Interactor
-//		inputInteractor->AddInteractionDevice(tracker1);
-//		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1); 
-//   
-//	/* devMan->GetCameraDataForAllDevices(cameraDataVector);
-//	updatePolyData(); */
-//	  
-//   /* connect(VRPNTimer,SIGNAL(timeout()),
-//		 this,SLOT(timerCallback()));
-//    VRPNTimer->start();*/
-//	
-//    
-////} 
-//}
-
+} 
 void initializeDevices()
-{
-// VRPN input events.
-	//VRPNTimer=new QTimer(this);
-	//VRPNTimer->setInterval(4); // in ms
-   
-	  
+{ 
 
 	/////////////////////////INTERACTOR////////////////////////////
 	// Initialize Device Interactor to manage all trackers
@@ -533,21 +468,17 @@ void initializeDevices()
 		trackerStyleCamera1 = vtkVRPNTrackerCustomSensorStyleCamera::New();
 		trackerStyleCamera1->SetTracker(tracker1);
 		trackerStyleCamera1->SetRenderer(renwin->GetRenderers()->GetFirstRenderer());
+			//Create device interactor style (defined in vtkInteractionDevice.lib) that determines how the device manipulates camera viewpoint
+		trackerStyleCamera2 = vtkVRPNTrackerCustomSensorStyleCamera::New();
+		trackerStyleCamera2->SetTracker(tracker1);
+		trackerStyleCamera2->SetRenderer(datawin->GetRenderers()->GetFirstRenderer());
+
 	
 		/////////////////////////INTERACTOR////////////////////////////
 		//Register Tracker to Device Interactor
 		inputInteractor->AddInteractionDevice(tracker1);
-		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1); 
-   
-	/* devMan->GetCameraDataForAllDevices(cameraDataVector);
-	updatePolyData(); */
-	  
-   /* connect(VRPNTimer,SIGNAL(timeout()),
-		 this,SLOT(timerCallback()));
-    VRPNTimer->start();*/
-	
-    
-//} 
+		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1);  
+		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera2);
 }
 
 int main(int argc, char** argv)
@@ -566,8 +497,11 @@ int main(int argc, char** argv)
 	printf("Number of devices connected: %d.\n", i);
 	//VTK Pipeline
 	vtkSmartPointer<vtkRenderer> ren = vtkSmartPointer<vtkRenderer>::New();
-	renwin = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderer> dataren = vtkSmartPointer<vtkRenderer>::New();
+	renwin = vtkRenderWindow::New();
+	datawin= vtkRenderWindow::New();
 	vtkSmartPointer<vtkRenderWindowInteractor> iren = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> data_iren = vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	
 	if (KINECT_SET_STEREO_ON)
 	{
@@ -578,64 +512,26 @@ int main(int argc, char** argv)
 	renwin->SetInteractor(iren);
 	renwin->SetSize(1280,800);
 	iren->Initialize();
+	datawin->AddRenderer(dataren);
+	datawin->SetInteractor(data_iren);
+	datawin->SetSize(1280,800);
+	data_iren->Initialize();
+
 
 	//Add timer callback
 	vtkSmartPointer<UpdateData> updateCallback = vtkSmartPointer<UpdateData>::New();
 	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
-	iren->CreateRepeatingTimer(TIMER_LENGTH);
-
+	iren->CreateRepeatingTimer(TIMER_LENGTH); 
 	
-	// 
-	
-	devMan->GetCameraDataForAllDevices(cameraDataVector);
-	kinectTransform = vtkMatrix4x4::New();
-	kinectTransform->SetElement(0,0,1.0);
-	kinectTransform->SetElement(0,1,0.0);
-	kinectTransform->SetElement(0,2,0.0);
-	kinectTransform->SetElement(0,3,-319.5);
-
-	kinectTransform->SetElement(1,0,0.0);
-	kinectTransform->SetElement(1,1,-1.0);
-	kinectTransform->SetElement(1,2,0.0);
-	kinectTransform->SetElement(1,3,239.5);
-	
-	kinectTransform->SetElement(2,0,0.0);
-	kinectTransform->SetElement(2,1,0.0);
-	kinectTransform->SetElement(2,2,-1.0);
-	kinectTransform->SetElement(2,3,-2214.114);
-	
-	kinectTransform->SetElement(3,0,0.0);
-	kinectTransform->SetElement(3,1,0.0);
-	kinectTransform->SetElement(3,2,0.0);
-	kinectTransform->SetElement(3,3,1.0);
-
-	if (!RESET_CAMERA && !DRAW_CONE)
-	{
-		vtkMatrix4x4::Invert(kinectTransform,kinectTransform);
-		
-	}
-	updatePolyData();
-	/*if (DRAW_CONE)
-	{*/
-		//Set up camera
+	devMan->GetCameraDataForAllDevices(cameraDataVector); 
+	updatePolyData(); 
 
 	if (RESET_CAMERA)
-	{
-		 
+	{  
 	ren->ResetCamera();
-	double orientNew[3];
-	vtkTransform::GetOrientation(orientNew,kinectTransform); 
-	ren->GetActiveCamera()->Roll(orientNew[2]);
-	ren->GetActiveCamera()->Azimuth(-1*orientNew[1]);
-	double position1[4] = { 0.0, 0.0, 1.0, 1.0}; 
-	kinectTransform->MultiplyPoint(position1,position1);
-	ren->GetActiveCamera()->SetPosition(position1);
-	ren->GetActiveCamera()->Modified();
-
-	/*ren->ResetCamera();
 	ren->GetActiveCamera()->Roll(180.0);
 	ren->GetActiveCamera()->Azimuth(180.0);
-	ren->GetActiveCamera()->Zoom(2.0);*/
+	ren->GetActiveCamera()->Zoom(2.0); 
 	}
 	else
 	{
@@ -643,74 +539,29 @@ int main(int argc, char** argv)
 	ren->GetActiveCamera()->Azimuth(180.0);
 	ren->GetActiveCamera()->SetPosition(0,0,6.69);
 	ren->GetActiveCamera()->Modified();
-	}
-	double* position = ren->GetActiveCamera()->GetPosition();
-	/*}*/
+
+	
+	dataren->GetActiveCamera()->Roll(180.0);
+	dataren->GetActiveCamera()->Azimuth(180.0);
+	dataren->GetActiveCamera()->SetPosition(0,0,6.69);
+	dataren->GetActiveCamera()->Modified();
+	} 
+	 
 	
 	if (USE_TRACKER)
-			initializeTracker(); 
-	 
-	 
-	   /*if (USE_TRACKER)
-			initializeTracker();
-		else
-		{ 
-			devMan->GetCameraDataForAllDevices(cameraDataVector);
-			updatePolyData();
-		}*/
-	iren->Start();
+			initializeTracker();   
+	/*iren->Start();
+	data_iren->Start();*/
+ 
+//	  // Start interacting
+  MSG msg;
+    while (1) {
+        PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
 
-
-
-//	//VTK Pipeline
-//	renderer1 = vtkRenderer::New();
-//	renwin = vtkRenderWindow::New();
-//	
-//	renwin->AddRenderer(renderer1);
-//	vtkRenderWindowInteractor* iren = vtkRenderWindowInteractor::New();
-//	renwin->SetInteractor(iren);
-//	renwin->SetSize(1280,800);
-//
-//	iren->Initialize();
-//
-//	/*vtkInteractionDeviceManager* manager = vtkInteractionDeviceManager::New();
-//
-//   vtkRenderWindowInteractor* iren = manager->GetInteractor(inputInteractor);*/
-//	
-//	/*
-//	renwin->SetInteractor(iren);
-//	vtkInteractorStyleTrackballCamera* interactorStyle = vtkInteractorStyleTrackballCamera::New();
-//*/
-//	//iren->SetInteractorStyle(interactorStyle);
-//
-//
-//	//vtkSmartPointer<vtkRenderWindowInteractor> iren = vtkSmartPointer<vtkRenderWindowInteractor>::New();
-//
-//
-//	/*iren->Initialize();*/
-//
-//	////Add timer callback
-//	vtkSmartPointer<UpdateData> updateCallback = vtkSmartPointer<UpdateData>::New();
-//	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
-//	iren->CreateRepeatingTimer(100);
-//
-//	
-//	//
-//	////devMan->GetCameraDataByDeviceIndex(0, &dataPacket);
-//	devMan->GetCameraDataForAllDevices(cameraDataVector);
-//	updatePolyData();
-//	////Set up camera
-//	renderer1->ResetCamera();
-//	renderer1->GetActiveCamera()->Roll(180.0);
-//	renderer1->GetActiveCamera()->Azimuth(180.0);
-//	renderer1->GetActiveCamera()->Zoom(2.0);
-//
-//	    if (USE_TRACKER)
-//			initializeTracker();
-//	
-// //
-//	iren->Start();
-//	
+       
+    }
 	delete devMan;
 	
 	return 0;
