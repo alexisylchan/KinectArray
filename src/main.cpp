@@ -48,13 +48,15 @@
 #include "vtkLight.h"
 #include "vtkLightKit.h"
 
+#include <vrpn_Analog.h> 
+
 #define S_WIDTH 640
 #define S_HEIGHT 480
-#define PIXEL_SCALE 1
+#define PIXEL_SCALE 2
 #define USE_TRACKER 1
-#define RESET_CAMERA 0
+#define RESET_CAMERA 1
 #define TRACKER_UPDATE_CONE_POS 0
-#define TIMER_LENGTH 4
+#define TIMER_LENGTH 1
 
 #define DRAW_CUBE 1
 
@@ -63,6 +65,7 @@
 
 #define CULL_DEPTH 0
 #define KINECT_SET_STEREO_ON 1
+#define USE_TNG 1
 struct vtkRenderGroup
 {
 	vtkSmartPointer<vtkPolyData> polyData_;
@@ -100,12 +103,43 @@ vtkRenderWindow* datawin  ;
 	vtkLight* MainLight;
 	vtkLightKit* LightKit;
 
+	vrpn_Analog_Remote* tng1;
+	
+	class tng_user_callback
+	{
+	public:
+	  char tng_name[vrpn_MAX_TEXT_LEN];
+	  vtkstd::vector<unsigned> tng_counts;
+	  int channelIndex;
+	  double initialValue;
+	};
+
+	tng_user_callback *TNGC1;
+	void VRPN_CALLBACK handleTNG(void *userdata,
+	const vrpn_ANALOGCB t)
+	{
+	  tng_user_callback *tData=static_cast<tng_user_callback *>(userdata); 
+
+	  // TNG 3B values go from 0 to 252. To get an eye separation of 0.0065 to be in the middle (126), we use delta  == 0.0065/126 ==
+		double value = t.channel[tData->channelIndex];  
+		double delta = value; /* - tData->initialValue; */
+		vtkCamera* camera = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+		camera->SetEyeOffset( (((camera->GetDistance()/camera->O2Screen)*0.065/2.0)/126.0)*delta);//Initial Camera Offset is 0, so no need to add to the initial camera offset
+				
+		camera = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+		camera->SetEyeOffset( (((camera->GetDistance()/camera->O2Screen)*0.065/2.0)/126.0)*delta);//Initial Camera Offset is 0, so no need to add to the initial camera offset
+				
+
+	}
+	
+
 /**
 	Function Declaration
 */
 void initializeLights();
 
 void initializeTracker();
+void initializeTNG();
 void initializeEyeAngle(vtkCamera* camera);
 void initializeDevices();
 
@@ -291,10 +325,15 @@ class UpdateData:public vtkCommand
 		}
 		virtual void Execute(vtkObject* caller, unsigned long eid, void* clientdata)
 		{ 
+			if (USE_TNG)
+			{
+				tng1->mainloop();
+			}
 		    if (USE_TRACKER)
 			{
 				inputInteractor->Update(); 
 			}
+			
 		 	devMan->GetCameraDataForAllDevices(cameraDataVector);
 			updatePolyData();   
 			renwin->Render();
@@ -323,16 +362,29 @@ void initializeTracker()
 	trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";//"tracker@localhost";//
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
-	trackerOrigin[0] =  -7.89;
+	trackerOrigin[0] =  -7.88;
 	trackerOrigin[1] =  -5.19;
-	trackerOrigin[2] =  -1.06
-		;
+	trackerOrigin[2] =  -1.04;
+		
 	sensorIndex = 0; 
 	origSensorIndex = 0;
  
 	initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
 	initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
 	initializeDevices( ); 
+}
+
+void initializeTNG()
+{
+		//TNG  
+		char tngAddress[] = "tng3name@localhost";
+		tng1 = new vrpn_Analog_Remote(tngAddress);
+		TNGC1 = new tng_user_callback;
+		TNGC1->channelIndex = sensorIndex; //TODO: Should this be origSensorIndex? How often do we reinitialize device 
+		TNGC1->initialValue = 0;
+		strncpy(TNGC1->tng_name,tngAddress,sizeof(TNGC1->tng_name));
+		tng1->register_change_handler(TNGC1,handleTNG);
+
 }
 void initializeEyeAngle(vtkCamera* camera)
 {      
@@ -417,8 +469,9 @@ void initializeEyeAngle(vtkCamera* camera)
 		double O2Left   = - DisplayOrigin[0];
 		double O2Top    =   DisplayY[1];
 		double O2Bottom = - DisplayX[1]; 
-		camera->SetConfigParams(O2Screen,O2Right,O2Left,O2Top,O2Bottom, 0.065  ,6.69/O2Screen/*renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetDistance()/O2Screen*/,SurfaceRot); 
-		SurfaceRot->Delete(); 
+		camera->SetConfigParams(O2Screen,O2Right,O2Left,O2Top,O2Bottom, 0.065  ,/*6.69*/(camera->GetDistance()/(2*O2Screen)),SurfaceRot);
+		camera->Modified(); 
+		SurfaceRot->Delete();
 		 
 } 
 void initializeDevices()
@@ -522,6 +575,7 @@ int main(int argc, char** argv)
 	ren->GetActiveCamera()->Roll(180.0);
 	ren->GetActiveCamera()->Azimuth(180.0);
 	ren->GetActiveCamera()->Zoom(2.0); 
+	dataren->ResetCamera();
 	}
 	else
 	{
@@ -537,9 +591,11 @@ int main(int argc, char** argv)
 	dataren->GetActiveCamera()->Modified();
 	} 
 	 
-	
+	   
+	if (USE_TNG)
+		initializeTNG();
 	if (USE_TRACKER)
-			initializeTracker();    	  
+			initializeTracker(); 
 	// Continue  interacting
   MSG msg;
     while (1) {
