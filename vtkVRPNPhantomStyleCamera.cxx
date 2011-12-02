@@ -1,0 +1,571 @@
+/*=========================================================================
+
+  Name:        vtkVRPNPhantomStyleCamera.cxx
+
+  Author:      David Borland, The Renaissance Computing Institute (RENCI)
+
+  Copyright:   The Renaissance Computing Institute (RENCI)
+
+  License:     Licensed under the RENCI Open Source Software License v. 1.0.
+               
+               See included License.txt or 
+               http://www.renci.org/resources/open-source-software-license
+               for details.
+
+=========================================================================*/
+
+#include "vtkVRPNPhantomStyleCamera.h"
+
+#include "vtkCamera.h"
+#include "vtkMath.h"
+#include "vtkObjectFactory.h"
+#include "vtkRenderWindow.h"
+ 
+#include "vtkSMRenderViewProxy.h"
+#include "vtkRenderer.h"
+#include "vtkRenderWindow.h"
+#include "vtkRenderWindowInteractor.h"
+#include "vtkVRPNTrackerCustomSensor.h"
+#include "vtkVRPNTrackerCustomSensorStyleCamera.h"
+#include "vtkVRPNAnalogOutput.h" 
+#include "vtkCamera.h"
+#include "vtkMatrix4x4.h"
+#include "vtkTransform.h"
+//#include "vtkCollisionDetectionFilter.h"
+
+#include "vtkConeSource.h"
+#include "vtkPolyDataMapper.h"
+#include "vtkCoordinate.h" 
+#include <QList>  
+#include <iostream>
+#include <fstream>
+#include <time.h>
+#include <sstream>
+#include <string>
+#include <vtkstd/vector>   
+#include "vtkProcessModule.h"
+
+#include "vtkActor.h"
+#include "vtkConeSource.h"
+#include "vtkProp3DCollection.h"
+#include "vtkPropCollection.h"
+#include "vtkCollection.h"
+#include "vtkOpenGLActor.h"
+
+vtkStandardNewMacro(vtkVRPNPhantomStyleCamera);
+vtkCxxRevisionMacro(vtkVRPNPhantomStyleCamera, "$Revision: 1.0 $");
+
+//----------------------------------------------------------------------------
+vtkVRPNPhantomStyleCamera::vtkVRPNPhantomStyleCamera() 
+{ 
+	first = 1;
+	createTube = 1;
+			
+}
+
+
+//----------------------------------------------------------------------------
+vtkVRPNPhantomStyleCamera::~vtkVRPNPhantomStyleCamera() 
+{
+}
+
+//----------------------------------------------------------------------------
+void vtkVRPNPhantomStyleCamera::OnEvent(vtkObject* caller, unsigned long eid, void* callData) 
+{
+  
+  vtkVRPNPhantom* Phantom ; 
+  switch(eid)
+    {
+    case vtkVRPNDevice::PhantomEvent:
+	  Phantom = static_cast<vtkVRPNPhantom*>(caller);
+      this->OnPhantom(Phantom);
+      break; 
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkVRPNPhantomStyleCamera::SetPhantom(vtkVRPNPhantom* Phantom)
+{  
+  if (Phantom != NULL) 
+    {
+    Phantom->AddObserver(vtkVRPNDevice::PhantomEvent, this->DeviceCallback);
+    }
+}  
+//----------------------------------------------------------------------------
+void vtkVRPNPhantomStyleCamera::SetActor(vtkActor* myActor) 
+{ 
+	this->myActor = myActor;
+}
+void vtkVRPNPhantomStyleCamera::SetConeSource(vtkConeSource* myCone) 
+{ 
+	this->myCone = myCone;
+} 
+void vtkVRPNPhantomStyleCamera::SetShowingTimeline(int showingTimeline)
+{ 
+	this->showingTimeline = showingTimeline;
+}
+void vtkVRPNPhantomStyleCamera::SetEvaluationLog(ofstream* evaluationlog)
+{ 
+	this->evaluationlog = evaluationlog;
+}
+//----------------------------------------------------------------------------
+ 
+void vtkVRPNPhantomStyleCamera::OnPhantom(vtkVRPNPhantom* Phantom)
+{
+	if (CREATE_VTK_CONE)
+	{
+	if (myActor)
+	{ 
+		double* position = Phantom->GetPosition();
+		double* newPosition = (double*)malloc(sizeof(double)*4);
+		//Scale up position. TODO: Determine how much to scale between phantom position and world position
+		for (int s = 0; s<3;s++)
+		{
+			newPosition[s]=position[s];
+		} 
+		
+		->GetActiveCamera()->GetCameraLightTransformMatrix(); 
+		cameraLightTransformMatrix->MultiplyPoint(position,newPosition); 
+		// Update Object Orientation
+        double  matrix[3][3];
+		double orientNew[4] ;
+		//Change transform quaternion to matrix
+		vtkMath::QuaternionToMatrix3x3(Phantom->GetRotation(), matrix); 
+		vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+		RotationMatrix->SetElement(0,0, matrix[0][0]);
+		RotationMatrix->SetElement(0,1, matrix[0][1]);
+		RotationMatrix->SetElement(0,2, matrix[0][2]); 
+		RotationMatrix->SetElement(0,3, 0.0); 
+		
+		RotationMatrix->SetElement(1,0, matrix[1][0]);
+		RotationMatrix->SetElement(1,1, matrix[1][1]);
+		RotationMatrix->SetElement(1,2, matrix[1][2]); 
+		RotationMatrix->SetElement(1,3, 0.0); 
+		
+		RotationMatrix->SetElement(2,0, matrix[2][0]);
+		RotationMatrix->SetElement(2,1, matrix[2][1]);
+		RotationMatrix->SetElement(2,2, matrix[2][2]); 
+		RotationMatrix->SetElement(2,3, 1.0); 
+
+		//cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
+		
+		vtkTransform::GetOrientation(orientNew,RotationMatrix);
+		myActor->SetOrientation(orientNew); 
+
+		double normalizedOrientNew= vtkMath::Norm(orientNew);
+		for (int i =0; i < 3; i++)
+		{
+			newPosition[i] = newPosition[i] -(myCone->GetHeight()/2.0)* (orientNew[i]/normalizedOrientNew);
+		}
+		double* newScaledPosition= this->ScaleByCameraFrustumPlanes(newPosition,proxy->GetRenderer(),Phantom->GetSensorIndex());
+		myActor->SetPosition(newScaledPosition);
+		/*myActor->SetPosition(newPosition);*/
+		myActor->Modified();
+		free(newPosition);
+		delete newScaledPosition;
+
+
+	}
+	}
+	else
+	{
+	double* position = Phantom->GetPosition(); 
+	
+	
+	pqServerManagerModel* serverManager = pqApplicationCore::instance()->getServerManagerModel(); 
+
+	for (int i = 0; i<serverManager->getNumberOfItems<pqView*>(); i++)
+	{
+		/*qWarning("Orig %f %f %f",position[0],position[1],position[2]);*/
+		pqView* view = serverManager->getItemAtIndex<pqView*>(i);
+		vtkSMRenderViewProxy *proxy = vtkSMRenderViewProxy::SafeDownCast( view->getViewProxy() );  
+		vtkCamera* camera = proxy->GetActiveCamera();  
+		
+		double* newPosition;
+		newPosition = this->ScaleByCameraFrustumPlanes(position,proxy->GetRenderer(),Phantom->GetSensorIndex());
+		//newPosition= this->ScalePosition(position,proxy->GetRenderer());
+
+			//Set position to view position
+		pqDataRepresentation *cursorData = pqApplicationCore::instance()->getServerManagerModel()->getItemAtIndex<pqDataRepresentation*>(pqVRPNStarter::PHANTOM_CURSOR); 
+		if (cursorData)
+		{
+		vtkSMPVRepresentationProxy *repProxy = 0;
+		repProxy = vtkSMPVRepresentationProxy::SafeDownCast(cursorData->getProxy());
+		vtkSMPropertyHelper(repProxy,"Position").Set(newPosition,3); 
+
+		 double  matrix[3][3];
+		double orientNew[3] ;
+		//Change transform quaternion to matrix
+		vtkMath::QuaternionToMatrix3x3(Phantom->GetRotation(), matrix);
+		vtkMatrix4x4* vtkMatrixToOrient = vtkMatrix4x4::New();
+		for (int i =0; i<4;i++)
+		{
+			for (int j = 0; j<4; j++)
+			{
+				if ((i == 3) || (j==3))
+				{
+					vtkMatrixToOrient->SetElement(i,j, 0);
+				}
+				else
+					vtkMatrixToOrient->SetElement(i,j, matrix[i][j]);
+			}
+		}
+		vtkTransform::GetOrientation(orientNew,vtkMatrixToOrient); 
+
+		vtkSMPropertyHelper(repProxy,"Orientation").Set(orientNew,3); 
+
+
+
+		delete newPosition;
+		repProxy->UpdateVTKObjects();
+	}
+	}
+	} 
+ 
+} 
+void vtkVRPNPhantomStyleCamera::SetCreateTube(bool createTube)
+{
+	this->createTube = createTube;
+}
+bool vtkVRPNPhantomStyleCamera::GetCreateTube()
+{
+	return this->createTube;
+}
+void vtkVRPNPhantomStyleCamera::CreateStreamTracerTube(pqView* view, vtkVRPNPhantom* Phantom, double* newPosition)
+{ 
+	
+	int streamtracerIndex = CreateParaViewObject(1,-1,view,Phantom,newPosition,"StreamTracer");
+	if (createTube)
+		this->CreateParaViewObject(streamtracerIndex,-1,view,Phantom,newPosition,"TubeFilter");
+		
+		
+}
+int vtkVRPNPhantomStyleCamera::CreateParaViewObject(int sourceIndex,int inputIndex,pqView* view, vtkVRPNPhantom* Phantom, double* newPosition,const char* name)
+{
+	
+		BEGIN_UNDO_SET(QString("Create '%1'").arg(name));
+		vtkSMProxyManager* pxm = vtkSMProxyManager::GetProxyManager();
+		vtkSMProxy* prototype = pxm->GetPrototypeProxy("filters",name);
+		QList<pqOutputPort*> outputPorts;
+		 
+		//NOTE: Cannot use AutoAccept because this creates 3 streamtracers everytime a button is clicked (PhantomButton probably is called 3 times due to frequency of Phantom updates)
+		// pqObjectInspectorWidget::setAutoAccept(true);
+	 
+		//Modified code from pqFiltersMenuReaction::createFilter()
+		pqPipelineSource* item = pqApplicationCore::instance()->getServerManagerModel()->getItemAtIndex<pqPipelineSource*>(sourceIndex);//TODO:Set object index to constant
+		
+		pqOutputPort* opPort = qobject_cast<pqOutputPort*>(item);
+		pqPipelineSource* source = qobject_cast<pqPipelineSource*>(item);
+		
+		if (source)
+		  {
+		  outputPorts.push_back(source->getOutputPort(0));
+		  //qWarning("source %d",source->getNumberOfOutputPorts());
+		  }
+		else if (opPort)
+		  {
+			outputPorts.push_back(opPort);
+			//qWarning("opPort %s",opPort->getPortName().toStdString()); 
+		  } 
+		QMap<QString, QList<pqOutputPort*> > namedInputs;
+		QList<const char*> inputPortNames = pqPipelineFilter::getInputPorts(prototype);
+		namedInputs[inputPortNames[0]] = outputPorts;
+
+		// If the filter has more than 1 input ports, we are simply going to ask the
+		// user to make selection for the inputs for each port. We may change that in
+		// future to be smarter.
+		if (pqPipelineFilter::getRequiredInputPorts(prototype).size() > 1)
+		{
+			//qWarning("need more inputs!!!");
+			vtkSMProxy* filterProxy = pxm->GetPrototypeProxy("filters",
+			name);
+			vtkSMPropertyHelper helper(filterProxy, inputPortNames[0]);
+			helper.RemoveAllValues();
+
+			foreach (pqOutputPort *outputPort, outputPorts)
+			{
+				helper.Add(outputPort->getSource()->getProxy(),
+				outputPort->getPortNumber());
+			}
+
+			pqChangeInputDialog dialog(filterProxy, pqCoreUtilities::mainWidget());
+			dialog.setObjectName("SelectInputDialog");
+			if (QDialog::Accepted != dialog.exec())
+			{
+				helper.RemoveAllValues();
+				// User aborted creation.
+				return -1;
+			}
+			helper.RemoveAllValues();
+			namedInputs = dialog.selectedInputs();
+		}
+
+		pqPipelineSource* createdSource = pqApplicationCore::instance()->getObjectBuilder()->createFilter("filters", name,
+		namedInputs, pqActiveObjects::instance().activeServer());
+		END_UNDO_SET();
+
+		bool setVisible = true;
+		if (!strcmp(name,"StreamTracer") )
+		{
+			setVisible = false;		
+			createdSource->setObjectName("UserSeededStreamTracer");
+		}
+		else if (!strcmp(name,"TubeFilter"))
+		{
+			setVisible = true;
+			createdSource->setObjectName("Tube1");
+		}
+		
+		this->ModifySeedPosition(createdSource,newPosition);
+
+		this->DisplayCreatedObject(view,createdSource,setVisible);
+ 
+		int newSourceIndex = pqApplicationCore::instance()->getServerManagerModel()->getNumberOfItems<pqPipelineSource*>();
+		//qWarning("Source index %d", --newSourceIndex);
+	return newSourceIndex;
+}
+void vtkVRPNPhantomStyleCamera::DisplayCreatedObject(pqView* view,pqPipelineSource* createdSource, bool setVisible)
+{
+	//Display createdSource in view
+		//Modified code from pqObjectInspectorWizard::accept()
+		for (int i = 0; i < pqApplicationCore::instance()->getServerManagerModel()->getNumberOfItems<pqView*> (); i++) //Check that there really are 2 views
+		{
+			pqView* displayView = pqApplicationCore::instance()->getServerManagerModel()->getItemAtIndex<pqView*>(i);
+			vtkSMRenderViewProxy *proxy = vtkSMRenderViewProxy::SafeDownCast( displayView->getViewProxy() );
+
+			pqDisplayPolicy* displayPolicy = pqApplicationCore::instance()->getDisplayPolicy();
+			
+
+			for (int cc=0; cc < createdSource->getNumberOfOutputPorts(); cc++)
+			{
+
+				pqDataRepresentation* repr = displayPolicy->createPreferredRepresentation(
+				createdSource->getOutputPort(cc), displayView, false);
+				if (!repr || !repr->getView())
+				{
+					//qWarning("!repr");
+					continue;
+				}
+				pqView* cur_view = repr->getView();
+				
+				//Change color
+				pqPipelineRepresentation* displayRepresentation =qobject_cast<pqPipelineRepresentation*>(repr);
+				displayRepresentation->colorByArray("Velocity",vtkDataObject::FIELD_ASSOCIATION_POINTS);
+				pqPipelineFilter* filter = qobject_cast<pqPipelineFilter*>(createdSource);
+				if (filter)
+				{
+					filter->hideInputIfRequired(cur_view);
+				}
+
+				repr->setVisible(true);
+
+			}
+			proxy->GetRenderWindow()->Render();
+			//Todo: Debug if this is actually needed to repaint an object then set it to invisible
+			createdSource->getRepresentation(0,view)->setVisible(setVisible);
+			proxy->GetRenderWindow()->Render();
+		} 
+}
+void vtkVRPNPhantomStyleCamera::ModifySeedPosition(pqPipelineSource* createdSource,double* newPosition)
+{
+	if(vtkSMProxyProperty* const source_property = vtkSMProxyProperty::SafeDownCast(
+		createdSource->getProxy()->GetProperty("Source")))
+    {
+    const QList<pqSMProxy> sources = pqSMAdaptor::getProxyPropertyDomain(source_property);
+    for(int i = 0; i != sources.size(); ++i)
+      {
+      pqSMProxy source = sources[i];
+      if(source->GetVTKClassName() == QString("vtkPointSource"))
+        {  
+      if(vtkSMDoubleVectorProperty* const center =
+        vtkSMDoubleVectorProperty::SafeDownCast(
+          source->GetProperty("Center")))
+        {
+        center->SetNumberOfElements(3);
+        center->SetElement(0, newPosition[0]);
+        center->SetElement(1, newPosition[1]);
+        center->SetElement(2, newPosition[2]);
+        }
+	  }
+	  
+      source->UpdateVTKObjects();
+      }
+    }
+
+}
+void vtkVRPNPhantomStyleCamera::CheckWithinPipelineBounds(pqView* view, vtkVRPNPhantom* Phantom, double* newPosition)
+{
+	// Check all  items except for first one (which is the cursor)
+		for (int j = 1; j < pqApplicationCore::instance()->getServerManagerModel()->getNumberOfItems<pqDataRepresentation*>(); j++) 
+		{
+			pqDataRepresentation *data = pqApplicationCore::instance()->getServerManagerModel()->getItemAtIndex<pqDataRepresentation*>(j);
+			double bounds[6];
+
+			data->getDataBounds(bounds); //vtkPVDataInformation defines bounds
+			if (vtkMath::AreBoundsInitialized(bounds))
+			{
+				if ((newPosition[0] < bounds[1]  && newPosition[0] > bounds[0]) 
+					&& (newPosition[1] < bounds[3]  && newPosition[1] > bounds[2])
+					&& (newPosition[2] < bounds[5]  && newPosition[2] > bounds[4]))
+				{
+					vtkSMPVRepresentationProxy *repProxy2 = 0;
+					repProxy2 = vtkSMPVRepresentationProxy::SafeDownCast(data->getProxy());	 
+					qWarning("Within bounds");
+					
+				}
+				/*	qWarning("Actor %f %f %f %f %f %f ",bounds[0],bounds[1],bounds[2],bounds[3],bounds[4],bounds[5]);
+					qWarning("Phantom %f %f %f",newPosition[0],newPosition[1],newPosition[2]); */
+	
+			}
+		}
+}
+double* vtkVRPNPhantomStyleCamera::ScalePosition(double* position,vtkRenderer* renderer)
+{
+		double* newPosition =  new double[4];
+		double* newScaledPosition =  new double[4];
+		double planes[24];
+		vtkCamera* camera = renderer->GetActiveCamera();  
+		 
+		//Attempt to rotate by camera orientation.
+		vtkMatrix4x4* cameraMatrix = camera->GetCameraLightTransformMatrix();
+		double camCoordPosition[4];
+		for (int i = 0; i<3;i++)
+		{
+			camCoordPosition[i] = position[i];
+		}
+		camCoordPosition[3] = 1.0;//renderer->GetActiveCamera()->GetDistance();
+		cameraMatrix->MultiplyPoint(camCoordPosition,newPosition);  
+		double* focalpoint = camera->GetFocalPoint();
+		for (int j = 0; j<3;j++)
+		{
+			newScaledPosition[j] = (newPosition[j]+ focalpoint[j])*camera->GetDistance() ;
+		}
+		
+		return newPosition;
+		
+}
+
+// Compute the bounds of the visible props
+void vtkVRPNPhantomStyleCamera::ComputeVisiblePropBounds(vtkRenderer* renderer1,double allBounds[6] )
+{
+  vtkProp    *prop;
+  double      *bounds;
+  int        nothingVisible=1; 
+
+  allBounds[0] = allBounds[2] = allBounds[4] = VTK_DOUBLE_MAX;
+  allBounds[1] = allBounds[3] = allBounds[5] = -VTK_DOUBLE_MAX;
+
+  // loop through all props
+  vtkCollectionSimpleIterator pit;
+  for (renderer1->Props->InitTraversal(pit);
+       (prop = renderer1->Props->GetNextProp(pit)); )
+    { 
+		//if( (dynamic_cast<vtkOpenGLActor*>(prop)) != NULL)
+		//{
+    // if it's invisible, or if its bounds should be ignored,
+    // or has no geometry, we can skip the rest
+    if ( prop->GetVisibility() && prop->GetUseBounds())
+      {
+      bounds = prop->GetBounds();
+      // make sure we haven't got bogus bounds
+      if ( bounds != NULL && vtkMath::AreBoundsInitialized(bounds))
+        {
+        nothingVisible = 0;
+
+        if (bounds[0] < allBounds[0])
+          {
+          allBounds[0] = bounds[0];
+          }
+        if (bounds[1] > allBounds[1])
+          {
+          allBounds[1] = bounds[1];
+          }
+        if (bounds[2] < allBounds[2])
+          {
+          allBounds[2] = bounds[2];
+          }
+        if (bounds[3] > allBounds[3])
+          {
+          allBounds[3] = bounds[3];
+          }
+        if (bounds[4] < allBounds[4])
+          {
+          allBounds[4] = bounds[4];
+          }
+        if (bounds[5] > allBounds[5])
+          {
+          allBounds[5] = bounds[5];
+          }
+        }//not bogus
+      }
+		}
+   /* }*/
+
+  if ( nothingVisible )
+    {
+    vtkMath::UninitializeBounds(allBounds);
+    vtkDebugMacro(<< "Can't compute bounds, no 3D props are visible");
+    return;
+    }
+}
+
+
+
+/**
+ASSUME THAT POSITION ALREADY PREMULTIPLIED BY LIGHT TRANSFORM IN ON PHANTOM
+*/
+double* vtkVRPNPhantomStyleCamera::ScaleByCameraFrustumPlanes(double* position,vtkRenderer* renderer,int sensorIndex)
+{
+
+		 
+		vtkCamera* camera = renderer->GetActiveCamera();  
+		 
+		 
+		double bounds[6];
+		this->ComputeVisiblePropBounds(renderer,bounds);
+
+		bool boundsInitialized = false;//vtkMath::AreBoundsInitialized(bounds);
+		/*
+		origin
+		0.000165 -0.065399 -0.088281 -0.083204  0.199428  0.892033  0.396967
+		left x 
+		-0.166063 -0.088536 -0.059010 -0.020889  0.086786  0.795809  0.598932
+		right x
+		0.152872 -0.092423 -0.060041 -0.015075  0.054087  0.855544  0.514676
+		top y
+		0.026668  0.204018 -0.053103  0.029616 -0.048494  0.072413  0.995755
+		bottom y 
+		0.010904 -0.095060 -0.026062 -0.073886  0.047785  0.111602  0.989850
+		farthest z
+		 pos.x     pos.y     pos.z    quat.x    quat.y    quat.z    quat.w
+		0.009999  0.025458  0.090221 -0.082397  0.014348  0.457322  0.885359 
+		closest z 
+		 pos.x     pos.y     pos.z    quat.x    quat.y    quat.z    quat.w
+		0.006774  0.015364 -0.071601 -0.010210  0.073726  0.682213  0.727355*/
+		
+		double init1[4] = {0.152872,0.204018,0.090221,0};
+		double init2[4] = {-0.166063,-0.095060,-0.071601,0};
+		vtkMatrix4x4* cameralight = camera->GetCameraLightTransformMatrix();
+		cameralight->MultiplyPoint(init1,init1);
+		cameralight->MultiplyPoint(init2,init2);
+		double* newScaledPosition =  new double[4];
+		double origScale = (init1[0] - init2[0])/2.0;
+		double cameraScale = boundsInitialized?((abs(bounds[0]-bounds[1]))/*/2.0*/): 1.0;
+		newScaledPosition[0] = position[0]* cameraScale/origScale;
+		origScale = (init1[1] - init2[1])/2.0;
+		cameraScale = boundsInitialized?((abs(bounds[2]-bounds[3]))/*/2.0*/): 1.0;
+		newScaledPosition[1] = position[1]* cameraScale/origScale;
+		origScale = (init1[2] - init2[2])/2.0;
+		cameraScale = boundsInitialized?((abs(bounds[4]-bounds[5]))/*/2.0*/): camera->GetDistance();
+		newScaledPosition[2] = position[2]* cameraScale/origScale;
+
+		return newScaledPosition;
+
+	  
+}
+ 
+//----------------------------------------------------------------------------
+void vtkVRPNPhantomStyleCamera::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os,indent);
+}
