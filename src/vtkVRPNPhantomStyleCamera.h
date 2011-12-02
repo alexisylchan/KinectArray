@@ -34,9 +34,7 @@
 #define CREATE_VTK_CONE 1
 
 //
-//class vtkCollisionDetectionFilter;
-class pqView;
-class pqPipelineSource;
+//class vtkCollisionDetectionFilter; 
 class vtkActor;
 class vtkConeSource;
 class vtkVRPNPhantomStyleCamera : public vtkDeviceInteractorStyle
@@ -64,7 +62,11 @@ public:
   /*void SetCollisionDetectionFilter(vtkCollisionDetectionFilter* CollisionFilter);*/
   vtkActor* myActor;
   vtkConeSource* myCone;
-
+  double  button1PressedPosition[4]; 
+  double  button2PressedPosition[4]; 
+  bool  button2AlreadyPressed; 
+  double pickedActorPos[4];
+ 
   void SetEvaluationLog(ofstream* evaluationlog);
 
   //To handle showing timeline ribbons
@@ -84,13 +86,10 @@ private:
   void operator=(const vtkVRPNPhantomStyleCamera&);  // Not implemented.
   double* ScalePosition(double* position,vtkRenderer* renderer);
   void ComputeVisiblePropBounds( vtkRenderer* renderer1,double allBounds[6] );
-  double* ScaleByCameraFrustumPlanes(double* position,vtkRenderer* renderer,int sensorIndex);
-  void CheckWithinPipelineBounds(pqView* view, vtkVRPNPhantom* Phantom,double* newPosition);
-  void CreateStreamTracerTube(pqView* view, vtkVRPNPhantom* Phantom,double* newPosition);
-  void ModifySeedPosition(pqPipelineSource* createdSource,double* newPosition);
-  void DisplayCreatedObject(pqView* view,pqPipelineSource* createdSource, bool setVisible);
+  void RotateVisibleProps(double position[],double orientNew[]);
+  void PickUpProp(double position[],double orientNew[]);
+  double* ScaleByCameraFrustumPlanes(double* position,vtkRenderer* renderer,int sensorIndex);    
   //if inputIndex is -1, that means that we do not specify custom input source
-  int CreateParaViewObject(int sourceIndex,int inputIndex, pqView* view, vtkVRPNPhantom* Phantom,double* newPosition,const char* name);
   int first;
   bool createTube;
   int showingTimeline;

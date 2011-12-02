@@ -63,8 +63,7 @@
 
 #define DRAW_CUBE 1
 
-#define DRAW_KINECT 1
-#define USE_PHANTOM 0
+#define DRAW_KINECT 1 
 
 #define CULL_DEPTH 0
 #define KINECT_SET_STEREO_ON 1
@@ -95,6 +94,8 @@ vtkRenderWindow* datawin  ;
   vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera1;
   vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera2;
   vtkVRPNTrackerCustomSensor* tracker1; 
+
+  vtkVRPNPhantomStyleCamera* phantomStyleCamera1;
 	 
 	bool first = true;
 	vtkActor* ConeActor;
@@ -151,7 +152,7 @@ void updatePolyData();
 void timerCallback();
 
   
-void createConeAndSphereFromVTK(bool deleteOldCone)
+void createCone(bool deleteOldCone)
 {
 	
 	double position[3] = {-0.000033, -0.065609, -0.087861};
@@ -163,7 +164,6 @@ void createConeAndSphereFromVTK(bool deleteOldCone)
 			ConeActor->Delete();
 			Cone->Delete();
 		}
-		  
 		 
 		vtkMatrix4x4* cameraLightTransformMatrix = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
 		cameraLightTransformMatrix->MultiplyPoint(position,position); 
@@ -191,11 +191,9 @@ void createConeAndSphereFromVTK(bool deleteOldCone)
 		vtkTransform::GetOrientation(orientNew,RotationMatrix); 
  
 	// ConeSource
-    Cone = vtkConeSource::New();
+    Cone = vtkConeSource::New(); 
 	Cone->SetRadius(0.05);
-	Cone->SetHeight(0.1); 
-	/*Cone->SetRadius(0.05);
-	Cone->SetHeight(0.1); */
+	Cone->SetHeight(0.1);  
 	Cone->SetDirection(orientNew); 
 
 	//Cone Mapper
@@ -206,6 +204,7 @@ void createConeAndSphereFromVTK(bool deleteOldCone)
     ConeActor->SetMapper(ConeMapper); 
 	ConeActor->SetPosition(position); 
 	ConeActor->UseBoundsOff();
+	ConeActor->Modified();
  	vtkRenderer* renderer1 = datawin->GetRenderers()->GetFirstRenderer();
 	renderer1->AddActor(ConeActor);
 
@@ -218,53 +217,10 @@ void createConeAndSphereFromVTK(bool deleteOldCone)
 
 void updatePolyData()
 {
-	if (USE_PHANTOM)
-	{
-		//double position[3] = {-0.000033, -0.065609, -0.087861};
-			//double quat[4] = { -0.205897 ,-0.050476, -0.227901 , 0.950326};
-			double  matrix[3][3];
-			double orientNew[3] ;
-			  
-	/*	   vtkMatrix4x4* cameraLightTransformMatrix = renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
-			cameraLightTransformMatrix->MultiplyPoint(position,position); */
-			// Update Object Orientation
-
-			//Change transform quaternion to matrix
-			//vtkMath::QuaternionToMatrix3x3(quat, matrix); 
-			//vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
-			//RotationMatrix->SetElement(0,0, matrix[0][0]);
-			//RotationMatrix->SetElement(0,1, matrix[0][1]);
-			//RotationMatrix->SetElement(0,2, matrix[0][2]); 
-			//RotationMatrix->SetElement(0,3, 0.0); 
-			//
-			//RotationMatrix->SetElement(1,0, matrix[1][0]);
-			//RotationMatrix->SetElement(1,1, matrix[1][1]);
-			//RotationMatrix->SetElement(1,2, matrix[1][2]); 
-			//RotationMatrix->SetElement(1,3, 0.0); 
-			//
-			//RotationMatrix->SetElement(2,0, matrix[2][0]);
-			//RotationMatrix->SetElement(2,1, matrix[2][1]);
-			//RotationMatrix->SetElement(2,2, matrix[2][2]); 
-			//RotationMatrix->SetElement(2,3, 1.0); 
-
-			////cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
-			//vtkTransform::GetOrientation(orientNew,RotationMatrix); 
-
-		//// ConeSource
-		//Cone = vtkConeSource::New();
-		//Cone->SetRadius(0.5);
-		//Cone->SetHeight( 1.0);  
-		////Cone->SetDirection(orientNew); 
-
-		////Cone Mapper
-		//vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
-		//ConeMapper->SetInput(Cone->GetOutput());
-	 //   
-		//ConeActor = vtkActor::New();
-		//ConeActor->SetMapper(ConeMapper); 
-		//ConeActor->SetPosition(position);   
-		//datawin->GetRenderers()->GetFirstRenderer()->AddActor(ConeActor);
-	}
+	/*if (USE_PHANTOM)
+	{ 
+		createCone(false);
+	}*/
 	if (DRAW_CUBE )
 	{
 		if (first)
@@ -279,7 +235,8 @@ void updatePolyData()
 		    
 			CubeActor = vtkActor::New();
 			CubeActor->SetMapper(CubeMapper); 
-			CubeActor->SetPosition(position);    
+			CubeActor->SetPosition(position); 
+			CubeActor->GetProperty()->SetOpacity(0.5);
 	  
 			datawin->GetRenderers()->GetFirstRenderer()->AddActor(CubeActor); 
 			datawin->GetRenderers()->GetFirstRenderer()->ResetCamera();
@@ -598,12 +555,12 @@ void initializeDevices()
 		phantom1->SetSensorIndex(sensorIndex);
 
 		phantom1->Initialize();
-  
+		createCone(false);
+
 		/////////////////////////CREATE  PHANTOM STYLE////////////////////////////
 		phantomStyleCamera1 = vtkVRPNPhantomStyleCamera::New(); 
 		/////////////////////////CONNECT TO SERVER CHANGE////////////////////////////
  
-		createConeAndSphereFromVTK(false);
 
 		phantomStyleCamera1->SetActor(ConeActor); 
 		phantomStyleCamera1->SetConeSource(Cone);
