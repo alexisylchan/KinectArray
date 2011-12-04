@@ -38,6 +38,12 @@ void DeviceManager::EnumerateDevices()
 	XnStatus nRetVal = XN_STATUS_OK;
 
     xn::NodeInfoList deviceList;
+		XnMapOutputMode mapMode;
+	mapMode.nXRes = XN_VGA_X_RES;
+	mapMode.nYRes = XN_VGA_Y_RES;
+	mapMode.nFPS = 30;
+
+
     nRetVal = context_->EnumerateProductionTrees(XN_NODE_TYPE_DEVICE, NULL, deviceList, NULL);
     CHECK_RV(nRetVal, "Enumerate");
     
@@ -64,6 +70,8 @@ void DeviceManager::EnumerateDevices()
         nRetVal = context_->CreateAnyProductionTree(XN_NODE_TYPE_DEPTH, &query, *(sensor->GetDepthGenerator()));
         CHECK_RV(nRetVal, "Create Depth Generator");
         
+		sensor->GetDepthGenerator()->SetMapOutputMode(mapMode);
+		sensor->GetImageGenerator()->SetMapOutputMode(mapMode);
         //Align the RGB and Depth Cameras
         sensor->AlignSensors();
         
