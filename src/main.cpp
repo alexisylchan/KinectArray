@@ -57,18 +57,21 @@
 #define S_HEIGHT 480
 #define PIXEL_SCALE 2
 #define USE_TRACKER 1
+#define USE_HEAD_TRACKER 0
 #define RESET_CAMERA 1
 #define TRACKER_UPDATE_CONE_POS 0
 #define TIMER_LENGTH 1
 
 #define DRAW_CUBE 1
 
-#define DRAW_KINECT 1 
+#define DRAW_KINECT 0 
 
 #define CULL_DEPTH 0
-#define KINECT_SET_STEREO_ON 1
-#define USE_TNG 1
+#define KINECT_SET_STEREO_ON 0
+#define USE_TNG 0
 #define USE_PHANTOM 1
+
+
 struct vtkRenderGroup
 {
 	vtkSmartPointer<vtkPolyData> polyData_;
@@ -360,7 +363,10 @@ class UpdateData:public vtkCommand
 				inputInteractor->Update(); 
 			}
 			
-		 	devMan->GetCameraDataForAllDevices(cameraDataVector);
+			if (DRAW_KINECT)
+			{
+		 		devMan->GetCameraDataForAllDevices(cameraDataVector);
+			}
 			updatePolyData();   
 			renwin->Render();
 			datawin->Render();
@@ -385,7 +391,8 @@ void initializeTracker()
 	useTracker = 1;
 
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
-	trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";//"tracker@localhost";//
+	//trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
+	trackerAddress =  "tracker@1";//
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
 	trackerOrigin[0] =  -7.88;
@@ -508,6 +515,8 @@ void initializeDevices()
     inputInteractor = vtkDeviceInteractor::New();
 		/////////////////////////CREATE  TRACKER////////////////////////////
 
+		if (USE_HEAD_TRACKER)
+		{
 		//Create connection to VRPN Tracker using vtkInteractionDevice.lib
 		tracker1 = vtkVRPNTrackerCustomSensor::New();
 		tracker1->SetDeviceName(trackerAddress); 
@@ -544,7 +553,7 @@ void initializeDevices()
 		inputInteractor->AddInteractionDevice(tracker1);
 		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1);  
 		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera2);
-
+		}
 		 
 		if (USE_PHANTOM)
 		{
@@ -579,6 +588,8 @@ void initializeDevices()
 int main(int argc, char** argv)
 {
 	
+	if (DRAW_KINECT)
+	{
 	devMan = new DeviceManager();
 	
 	unsigned int i = devMan->GetNODevicesConnected();
@@ -590,6 +601,7 @@ int main(int argc, char** argv)
 	}
 	
 	printf("Number of devices connected: %d.\n", i);
+	}
 	//VTK Pipeline
 	vtkSmartPointer<vtkRenderer> ren = vtkSmartPointer<vtkRenderer>::New();
 	vtkSmartPointer<vtkRenderer> dataren = vtkSmartPointer<vtkRenderer>::New();
@@ -622,7 +634,10 @@ int main(int argc, char** argv)
 	iren->CreateRepeatingTimer(TIMER_LENGTH); 
 	
 	initializeLights();
-	devMan->GetCameraDataForAllDevices(cameraDataVector); 
+	if (DRAW_KINECT)
+	{
+		devMan->GetCameraDataForAllDevices(cameraDataVector); 
+	}
 	updatePolyData(); 
 
 	if (RESET_CAMERA)
