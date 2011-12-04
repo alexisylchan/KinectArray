@@ -65,7 +65,7 @@
 
 #define DRAW_KINECT 1
 
-#define CULL_DEPTH 0
+#define CULL_DEPTH 1
 #define KINECT_SET_STEREO_ON 0
 #define USE_TNG 0
 #define USE_PHANTOM 0
@@ -337,11 +337,7 @@ void updatePolyData()
 		for(int y = 0; y < S_HEIGHT; y++)
 		{
 			for(int x = 0; x < S_WIDTH; x++)
-			{
-
-				/*if (!RESET_CAMERA)
-				{*/
-
+			{ 
 					XnDepthPixel d = cameraDataVector[i].depthMap_[x+y*S_WIDTH];
 					XnRGB24Pixel c = cameraDataVector[i].imageMap_[x+y*S_WIDTH];
 		
@@ -350,14 +346,7 @@ void updatePolyData()
 					double pixPos[4];
 					XnFieldOfView fov;
 					
-					devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetFieldOfView(fov);
-					 
-					//pixPos[0] = ((double)x)/*/100.0*/; pixPos[1] = ((double)y)/*/100.0*/; pixPos[2] = 1;//d/**0.001-1.0*/;
-			/*		pixPos[0] = x; pixPos[1] = y; pixPos[2] = 1; 
-					pixPos[3] = 0;*/
- 
-					/*double transformedPixPos[4];
-				 	KinectTransform->MultiplyPoint(pixPos,transformedPixPos); */
+					devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetFieldOfView(fov); 
 
 					pixPos[0] = ((x - intrinsicMat->GetElement(0,2))*d)/intrinsicMat->GetElement(0,0) ; 
 					pixPos[1] = ((y - intrinsicMat->GetElement(1,2))*d)/intrinsicMat->GetElement(1,1); 
@@ -390,44 +379,20 @@ void updatePolyData()
 					transformedPixPos[1] = transformedPixPos[1]/((2277.582031 + 416.293884)/2.0);
 					transformedPixPos[2] = transformedPixPos[2]/((0.000000 + 4406.604004)/2.0);
 
-					if (d == 0  || (CULL_DEPTH && d > 2000))/*(d == 0)*/
+					if ( /*d == 0  || */ (CULL_DEPTH && d > 1000))/*(d == 0)*/
 					{
-						id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],-1.0);
-						///*id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],-1.0);*/
+						id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],-1.0); 
 						color->InsertNextTuple3(0,0,0);
 					}
 					else  
 					{
-				 		id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],transformedPixPos[2]);
-						/*
-				 		id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],transformedPixPos[2]); */
+				 		id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],transformedPixPos[2]); 
 						color->InsertNextTuple3(c.nRed, c.nGreen, c.nBlue);
 						
 					}
 		
 					cellArray->InsertNextCell(1);
 					cellArray->InsertCellPoint(id); 
-				//}
-				//else
-				//{
-				//	XnDepthPixel d = cameraDataVector[i].depthMap_[x+y*S_WIDTH];
-				//	XnRGB24Pixel c = cameraDataVector[i].imageMap_[x+y*S_WIDTH];
-		
-				//	vtkIdType id;
-				//	if (d == 0  || (CULL_DEPTH && d > 2000))/*(d == 0)*/
-				//	{
-				//		id = points->InsertNextPoint(x,y,4096*.3);
-				//		color->InsertNextTuple3(0,0,0);
-				//	}
-				//	else  
-				//	{
-				//		id = points->InsertNextPoint(x*PIXEL_SCALE,y*PIXEL_SCALE,/*d*0.001*/d*.3);
-				//		color->InsertNextTuple3(c.nRed, c.nGreen, c.nBlue);
-				//	}
-		
-				//	cellArray->InsertNextCell(1);
-				//	cellArray->InsertCellPoint(id);
-				//}
 			}
 		}
 		if (first)
@@ -489,7 +454,7 @@ void initializeTracker()
 	useTracker = 1;
 
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
-	 trackerAddress =   "Tracker0@tracker1-cs.cs.unc.edu";  "tracker@gamma9.cs.unc.edu";//
+	 trackerAddress =   "tracker@localhost"; //"Tracker0@tracker1-cs.cs.unc.edu";
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
 	trackerOrigin[0] =  -7.88;
@@ -737,30 +702,21 @@ int main(int argc, char** argv)
 		initializeTNG();
 	if (USE_TRACKER)
 			initializeTracker(); 
-	if (RESET_CAMERA)
-	{  
-	ren->ResetCamera();
-	ren->GetActiveCamera()->Roll(180.0);
-	ren->GetActiveCamera()->Azimuth(180.0);
-	ren->GetActiveCamera()->Zoom(2.0); 
-	dataren->ResetCamera();
-	}
-	else
-	{
-	  ren->GetActiveCamera()->SetPosition(0,-1,3.34); 
-	ren->GetActiveCamera()->Roll(180.0);
-	ren->GetActiveCamera()->Azimuth(180.0);
 	
-	 ren->GetActiveCamera()->Modified();   
-	 
-		 //ren->ResetCamera(); 
+	ren->GetActiveCamera()->SetPosition(0,-1,3.34); 
+	ren->GetActiveCamera()->Roll(180.0);
+	ren->GetActiveCamera()->Azimuth(180.0);
+
+	ren->GetActiveCamera()->Modified();   
+
+	 //ren->ResetCamera(); 
 	printf("rencamdis %f",dataren->GetActiveCamera()->GetDistance());
 	printf("renviewangle %f",dataren->GetActiveCamera()->GetViewAngle());
-	 
-	 dataren->ResetCamera();  
+
+	dataren->ResetCamera();  
 	printf("camdis %f",dataren->GetActiveCamera()->GetDistance());
 	printf("viewangle %f",dataren->GetActiveCamera()->GetViewAngle());
-	} 
+	 
 
 	// Continue  interacting
   MSG msg;
