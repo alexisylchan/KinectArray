@@ -76,9 +76,18 @@ vtkVRPNPhantomStyleCamera::vtkVRPNPhantomStyleCamera()
 	pickedActorPos[3] = 0.0;
 
 	button2AlreadyPressed = false;
+	PhantomType = PHANTOM_TYPE_OMNI;
 }
 
 
+void vtkVRPNPhantomStyleCamera::SetPhantomType(int type)
+{
+	this->PhantomType = type;
+}
+int vtkVRPNPhantomStyleCamera::GetPhantomType()
+{
+	return this->PhantomType;
+}
 //----------------------------------------------------------------------------
 vtkVRPNPhantomStyleCamera::~vtkVRPNPhantomStyleCamera() 
 {
@@ -123,6 +132,7 @@ void vtkVRPNPhantomStyleCamera::SetPhantom(vtkVRPNPhantom* Phantom)
 void vtkVRPNPhantomStyleCamera::SetActor(vtkActor* myActor) 
 { 
 	this->myActor = myActor;
+	this->myActor->GetProperty()->GetColor(actorColor);
 }
 void vtkVRPNPhantomStyleCamera::SetConeSource(vtkConeSource* myCone) 
 { 
@@ -238,54 +248,54 @@ void vtkVRPNPhantomStyleCamera::RotateVisibleProps(double position[],double orie
  
 void vtkVRPNPhantomStyleCamera::OnPhantom(vtkVRPNPhantom* Phantom)
 {
-	if (CREATE_VTK_CONE)
+	if (this->PhantomType == PHANTOM_TYPE_OMNI)
 	{
-	if (myActor)
-	{ 
-		
-		double* position = Phantom->GetPosition();
-		double* newPosition = (double*)malloc(sizeof(double)*4);
-		//Scale up position. TODO: Determine how much to scale between phantom position and world position
-		for (int s = 0; s<3;s++)
+		if (myActor)
+		{ 
+			
+			double* position = Phantom->GetPosition();
+			double* newPosition = (double*)malloc(sizeof(double)*4);
+			//Scale up position. TODO: Determine how much to scale between phantom position and world position
+			for (int s = 0; s<3;s++)
+			{
+				newPosition[s]=position[s];
+			} 
+			// 
+			// Update Object Orientation
+			double  matrix[3][3];
+			double orientNew[4] ;
+			//Change transform quaternion to matrix
+			vtkMath::QuaternionToMatrix3x3(Phantom->GetRotation(), matrix); 
+			vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+			RotationMatrix->SetElement(0,0, matrix[0][0]);
+			RotationMatrix->SetElement(0,1, matrix[0][1]);
+			RotationMatrix->SetElement(0,2, matrix[0][2]); 
+			RotationMatrix->SetElement(0,3, 0.0); 
+			
+			RotationMatrix->SetElement(1,0, matrix[1][0]);
+			RotationMatrix->SetElement(1,1, matrix[1][1]);
+			RotationMatrix->SetElement(1,2, matrix[1][2]); 
+			RotationMatrix->SetElement(1,3, 0.0); 
+			
+			RotationMatrix->SetElement(2,0, matrix[2][0]);
+			RotationMatrix->SetElement(2,1, matrix[2][1]);
+			RotationMatrix->SetElement(2,2, matrix[2][2]); 
+			RotationMatrix->SetElement(2,3, 1.0);  
+			vtkTransform::GetOrientation(orientNew,RotationMatrix); 
+			myActor->SetOrientation(orientNew);  
+			double* newScaledPosition= this->ScaleByCameraFrustumPlanes(newPosition,this->Renderer,Phantom->GetSensorIndex());
+			//Temporarily put this here
+				double bounds[6];
+		this->Renderer->ComputeVisiblePropBounds(bounds);
+		double delta[3] = {0.0,0.0,0.0};
+		if (vtkMath::AreBoundsInitialized(bounds) && vtkMath::PointIsWithinBounds( newScaledPosition,bounds,delta))
 		{
-			newPosition[s]=position[s];
+			 this->myActor->GetProperty()->SetColor(1,0,0); 
 		} 
-		// 
-		// Update Object Orientation
-        double  matrix[3][3];
-		double orientNew[4] ;
-		//Change transform quaternion to matrix
-		vtkMath::QuaternionToMatrix3x3(Phantom->GetRotation(), matrix); 
-		vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
-		RotationMatrix->SetElement(0,0, matrix[0][0]);
-		RotationMatrix->SetElement(0,1, matrix[0][1]);
-		RotationMatrix->SetElement(0,2, matrix[0][2]); 
-		RotationMatrix->SetElement(0,3, 0.0); 
-		
-		RotationMatrix->SetElement(1,0, matrix[1][0]);
-		RotationMatrix->SetElement(1,1, matrix[1][1]);
-		RotationMatrix->SetElement(1,2, matrix[1][2]); 
-		RotationMatrix->SetElement(1,3, 0.0); 
-		
-		RotationMatrix->SetElement(2,0, matrix[2][0]);
-		RotationMatrix->SetElement(2,1, matrix[2][1]);
-		RotationMatrix->SetElement(2,2, matrix[2][2]); 
-		RotationMatrix->SetElement(2,3, 1.0);  
-		vtkTransform::GetOrientation(orientNew,RotationMatrix); 
-		myActor->SetOrientation(orientNew);  
-		double* newScaledPosition= this->ScaleByCameraFrustumPlanes(newPosition,this->Renderer,Phantom->GetSensorIndex());
-		//Temporarily put this here
-			double bounds[6];
-	this->Renderer->ComputeVisiblePropBounds(bounds);
-	double delta[3] = {0.0,0.0,0.0};
-	if (vtkMath::AreBoundsInitialized(bounds) && vtkMath::PointIsWithinBounds( newScaledPosition,bounds,delta))
-	{
-		 this->myActor->GetProperty()->SetColor(1,0,0); 
-	} 
-	else
-	{
-		this->myActor->GetProperty()->SetColor(1,1,1);
-	} 
+		else
+		{
+			this->myActor->GetProperty()->SetColor(actorColor);
+		} 
 
 
 		if (Phantom->GetButton(0))
@@ -299,15 +309,15 @@ void vtkVRPNPhantomStyleCamera::OnPhantom(vtkVRPNPhantom* Phantom)
 		} 
 		else if (!Phantom->GetButton(1))
 		{
-vtkProp3D* prop;
+			vtkProp3D* prop;
 
 			for (int j = 0; j< this->Renderer->GetViewProps()->GetNumberOfItems(); j++ )
-  {
-	  prop= vtkProp3D::SafeDownCast(this->Renderer->GetViewProps()->GetItemAsObject(j));
- 
-	   prop->PhantomPicked = false;
-	   prop->Modified();
-  }
+			{
+			prop= vtkProp3D::SafeDownCast(this->Renderer->GetViewProps()->GetItemAsObject(j));
+
+			prop->PhantomPicked = false;
+			prop->Modified();
+			}
 
 			button2AlreadyPressed = false;
 		}
@@ -317,10 +327,86 @@ vtkProp3D* prop;
 		delete newScaledPosition;
 
 
+		}
 	}
+	else if (this->PhantomType == PHANTOM_TYPE_DESKTOP)
+	{
+		
+		if (myActor)
+		{ 
+			
+			double* position = Phantom->GetPosition();
+			double* newPosition = (double*)malloc(sizeof(double)*4);
+			//Scale up position. TODO: Determine how much to scale between phantom position and world position
+			for (int s = 0; s<3;s++)
+			{
+				newPosition[s]=position[s];
+			} 
+			// 
+			// Update Object Orientation
+			double  matrix[3][3];
+			double orientNew[4] ;
+			//Change transform quaternion to matrix
+			vtkMath::QuaternionToMatrix3x3(Phantom->GetRotation(), matrix); 
+			vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+			RotationMatrix->SetElement(0,0, matrix[0][0]);
+			RotationMatrix->SetElement(0,1, matrix[0][1]);
+			RotationMatrix->SetElement(0,2, matrix[0][2]); 
+			RotationMatrix->SetElement(0,3, 0.0); 
+			
+			RotationMatrix->SetElement(1,0, matrix[1][0]);
+			RotationMatrix->SetElement(1,1, matrix[1][1]);
+			RotationMatrix->SetElement(1,2, matrix[1][2]); 
+			RotationMatrix->SetElement(1,3, 0.0); 
+			
+			RotationMatrix->SetElement(2,0, matrix[2][0]);
+			RotationMatrix->SetElement(2,1, matrix[2][1]);
+			RotationMatrix->SetElement(2,2, matrix[2][2]); 
+			RotationMatrix->SetElement(2,3, 1.0);  
+			vtkTransform::GetOrientation(orientNew,RotationMatrix); 
+			myActor->SetOrientation(orientNew);  
+			double* newScaledPosition= this->ScaleByCameraFrustumPlanes(newPosition,this->Renderer,Phantom->GetSensorIndex());
+			//Temporarily put this here
+				double bounds[6];
+		this->Renderer->ComputeVisiblePropBounds(bounds);
+		double delta[3] = {0.0,0.0,0.0};
+		if (vtkMath::AreBoundsInitialized(bounds) && vtkMath::PointIsWithinBounds( newScaledPosition,bounds,delta))
+		{
+			 this->myActor->GetProperty()->SetColor(1,0,0); 
+		} 
+		else
+		{
+			this->myActor->GetProperty()->SetColor(actorColor);
+		}  
+		if (Phantom->GetButton(0))
+		{ 
+			
+			PickUpProp(newScaledPosition,orientNew);
+		} 
+		else if (!Phantom->GetButton(0))
+		{
+			vtkProp3D* prop;
+
+			for (int j = 0; j< this->Renderer->GetViewProps()->GetNumberOfItems(); j++ )
+			{
+			prop= vtkProp3D::SafeDownCast(this->Renderer->GetViewProps()->GetItemAsObject(j));
+
+			prop->PhantomPicked = false;
+			prop->Modified();
+			}
+
+			button2AlreadyPressed = false;
+		}
+		myActor->SetPosition(newScaledPosition); 
+		myActor->Modified();
+		free(newPosition);
+		delete newScaledPosition;
+
+
+		}
 	}
 	  
-	} 
+} 
 void vtkVRPNPhantomStyleCamera::SetCreateTube(bool createTube)
 {
 	this->createTube = createTube;
@@ -436,8 +522,35 @@ double* vtkVRPNPhantomStyleCamera::ScaleByCameraFrustumPlanes(double* position,v
 		 
 		bool boundsInitialized = false; 
 		 
-		double init1[4] = {0.152872,0.204018,0.090221,0};
-		double init2[4] = {-0.166063,-0.095060,-0.071601,0};
+		double init1[4], init2[4];
+		if (this->PhantomType == PHANTOM_TYPE_OMNI)
+		{
+			init1[0] = 0.152872;
+			init1[1] = 0.204018;
+			init1[2] = 0.090221;
+			init1[3] = 0;
+
+			
+			init2[0] = -0.166063;
+			init2[1] = -0.095060;
+			init2[2] = -0.071601;
+			init2[3] = 0; 
+		}
+		else 
+		{
+			init1[0] = 0.123099 ;
+			init1[1] = 0.145876 ;
+			init1[2] = 0.114927 ;
+			init1[3] = 0;
+
+			
+			init2[0] = -0.097871 ;
+			init2[1] = -0.063808 ;
+			init2[2] = -0.068966 ;
+			init2[3] = 0; 
+		}
+
+
 		/*vtkMatrix4x4* cameralight = camera->GetCameraLightTransformMatrix();
 		cameralight->MultiplyPoint(init1,init1);
 		cameralight->MultiplyPoint(init2,init2); */

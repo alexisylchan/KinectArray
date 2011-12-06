@@ -32,6 +32,8 @@
 #include "vtkVRPNPhantom.h"
 
 #define CREATE_VTK_CONE 1
+#define PHANTOM_TYPE_OMNI 0
+#define PHANTOM_TYPE_DESKTOP 1
 
 //
 //class vtkCollisionDetectionFilter; 
@@ -56,6 +58,9 @@ public:
   // Set and Get Create Tube
   void SetCreateTube(bool createTube);
   bool GetCreateTube();
+
+  void SetPhantomType(int type);
+  int GetPhantomType();
 
   void SetActor(vtkActor* myActor);
   void SetConeSource(vtkConeSource* myCone);
@@ -82,6 +87,8 @@ protected:
 
 private: 
 
+  int PhantomType;
+  double actorColor[3];
   vtkVRPNPhantomStyleCamera(const vtkVRPNPhantomStyleCamera&);  // Not implemented.
   void operator=(const vtkVRPNPhantomStyleCamera&);  // Not implemented.
   double* ScalePosition(double* position,vtkRenderer* renderer);
