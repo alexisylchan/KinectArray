@@ -55,19 +55,22 @@
 #include "vtkMatrix4x4.h"
 #define S_WIDTH 640
 #define S_HEIGHT 480
-#define PIXEL_SCALE 2
-#define USE_TRACKER 1 
+#define PIXEL_SCALE 2 
  
 #define TIMER_LENGTH 1
 
-#define DRAW_CUBE 1
-#define DRAW_KINECT 0
-#define CULL_DEPTH 1
-#define KINECT_SET_STEREO_ON 0
-#define USE_TNG 1
-#define USE_PHANTOM 1
-#define USE_HIBALL_HEADTRACKER 1
+#define COMP_SUTHERLAND 0
+#define COMP_GAMMA9 1
+#define COMPUTE_KINECT_BOUNDS 0
+int comp = -1;
 
+bool drawData = false;
+bool drawKinect = false;
+bool cullDepth = false;
+bool useTNG = false;
+bool usePhantom = false;
+bool drawInStereo = false;
+bool useTracker = false;
 
 struct vtkRenderGroup
 {
@@ -83,8 +86,7 @@ vtkRenderWindow* renwin  ;
 vtkRenderWindow* datawin  ;
 
 
-// Headtracking
-  int useTracker;
+// Headtracking 
   const char* trackerAddress;
   double trackerOrigin[3];
   int sensorIndex;
@@ -115,8 +117,7 @@ vtkRenderWindow* datawin  ;
 	//Replace with data set
 	vtkActor* CubeActor;
 	vtkCubeSource* CubeSource;
-
-	vtkMatrix4x4* KinectTransform;
+ 
 	vtkMatrix4x4* intrinsicMat;
 	vtkMatrix4x4* extrinsicMat;
 	vtkMatrix4x4* rotate180YOpenNI;
@@ -124,7 +125,7 @@ vtkRenderWindow* datawin  ;
 	vtkLight* MainLight;
 	vtkLightKit* LightKit;
 
- 
+	
 	FILE* coordsLog;
 	vrpn_Analog_Remote* tng1;
 	
@@ -302,7 +303,7 @@ void createConeG(bool deleteOldCone)
 
 void updatePolyData()
 { 
-	if (DRAW_CUBE )
+	if (drawData )
 	{
 		if (first)
 		{
@@ -323,7 +324,7 @@ void updatePolyData()
 		}
 	 
 	}
-	if (DRAW_KINECT)
+	if (drawKinect)
 	{
 		if (first)
 		{
@@ -358,18 +359,9 @@ void updatePolyData()
 		extrinsicMat->SetElement(2,1,0.173362);
 		extrinsicMat->SetElement(2,2,0.984804); 
 		extrinsicMat->SetElement(2,3,78.0203); 
-		KinectTransform = vtkMatrix4x4::New();
-		vtkMatrix4x4::Multiply4x4(intrinsicMat,extrinsicMat,KinectTransform);
-		/*intrinsicMat->Delete();
-		extrinsicMat->Delete();*/
-		KinectTransform->Invert(); 
-		rotate180YOpenNI =  vtkMatrix4x4::New();
-		rotate180YOpenNI->Identity();
-		rotate180YOpenNI->SetElement(0,0,-1);
-		rotate180YOpenNI->SetElement(2,2,-1);
-		KinectTransform->Multiply4x4(KinectTransform,rotate180YOpenNI,KinectTransform); 
-		
-		coordsLog = fopen("coordslog-posttransformedbounds.txt","w");
+
+		 		
+		coordsLog = fopen("coordslog-posttransformedbounds2.txt","w");
 		}
 
 	for(unsigned int i = 0; i < cameraDataVector.size(); i++)
@@ -432,23 +424,30 @@ void updatePolyData()
 					transformedPixPos[2] = d/(devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetDeviceMaxDepth()/2.0); 
 					transformedPixPos[3] = 0;  
 	
-					/*if (first)
+					if ( COMPUTE_KINECT_BOUNDS && first )
 					{
+						
+
 						fprintf(coordsLog,"%f , %f , %f, %f\n",transformedPixPos[0],transformedPixPos[1],transformedPixPos[2],transformedPixPos[3]);
-					} */
+					}  
 
 					 
-					/*scale
+					/*scale 
 					xMax 2516.280273 , xMin -1051.145264 , 
 					yMax 2277.582031 , yMin -416.293884, 
 					zMax 0.000000, zMin -4406.604004, 
 					wMax 0.000000, wMin 0.000000*/
+						/*scale 2
+					 xMax 2104.453125 , xMin -4754.977539 
+					 yMax 2113.515137 , yMin -5464.675781, 
+					 zMax 1.056400, zMin 0.000000, 
+					 wMax 0.000000, wMin 0.000000*/
 
 					transformedPixPos[0] = transformedPixPos[0]/((2516.280273 + 1051.145264)/2.0);
 					transformedPixPos[1] = transformedPixPos[1]/((2277.582031 + 416.293884)/2.0);
 					transformedPixPos[2] = transformedPixPos[2]/((0.000000 + 4406.604004)/2.0);
 
-					if ( /*d == 0  || */ (CULL_DEPTH && d > 1000))/*(d == 0)*/
+					if ( /*d == 0  || */ (cullDepth && d > 1000))/*(d == 0)*/
 					{
 						id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],-1.0); 
 						color->InsertNextTuple3(0,0,0);
@@ -489,16 +488,19 @@ class UpdateData:public vtkCommand
 		}
 		virtual void Execute(vtkObject* caller, unsigned long eid, void* clientdata)
 		{ 
-			if (USE_TNG)
+			if (useTNG)
 			{
 				tng1->mainloop();
 			}
-		    if (USE_TRACKER)
+		    if (useTracker)
 			{
 				inputInteractor->Update(); 
 			}
 			
-		 	devMan->GetCameraDataForAllDevices(cameraDataVector);
+		 	if (drawKinect)
+			{
+				devMan->GetCameraDataForAllDevices(cameraDataVector);
+			}
 			updatePolyData();   
 			renwin->Render();
 			datawin->Render();
@@ -523,10 +525,18 @@ void initializeTracker()
 	useTracker = 1;
 
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
-	if (USE_HIBALL_HEADTRACKER)
+	if (comp == COMP_SUTHERLAND)
+	{
 		trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
+	}
+	else if (comp == COMP_GAMMA9)
+	{
+		trackerAddress =  "tracker@gamma9.cs.unc.edu"; 
+	}
 	else
-		trackerAddress =  "tracker@gamma9.cs.unc.edu"; //
+	{
+		trackerAddress = "tracker@1";
+	}
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
 	trackerOrigin[0] =  -7.88;
@@ -687,7 +697,7 @@ void initializeDevices()
 		inputInteractor->AddDeviceInteractorStyle(sciDataStyleCamera);
 
 		 
-		if (USE_PHANTOM)
+		if (usePhantom)
 		{
 
 		
@@ -744,20 +754,88 @@ void initializeDevices()
 }
 
 int main(int argc, char** argv)
-{
-	
-	
-	devMan = new DeviceManager();
-	
-	unsigned int i = devMan->GetNODevicesConnected();
-	
-	if (i < 1)
+{ 
+	while (--argc > 0 )
+	{    
+		if (!strcmp(argv[argc] , "--sutherland"))
+		{
+			
+			if (comp != COMP_GAMMA9)
+				comp = COMP_SUTHERLAND;
+			else
+			{
+				printf ("Error trying to assign app to two computers!");
+				exit(1);
+			} 
+		}
+		else if (!strcmp(argv[argc] , "--gamma9"))
+		{
+			if (comp != COMP_SUTHERLAND)
+				comp = COMP_GAMMA9;
+			else
+			{
+				printf ("Error trying to assign app to two computers!");
+				exit(1);
+			}
+		}
+		else if (!strcmp(argv[argc] , "--drawInStereo"))
+		{
+			drawInStereo = true;
+		}
+		else if (!strcmp(argv[argc] , "--phantom"))
+		{
+			usePhantom = true;
+		}
+		else if (!strcmp(argv[argc] , "--tng"))
+		{
+			useTNG = true;
+		}
+		else if (!strcmp(argv[argc] , "--cull-depth"))
+		{
+			cullDepth = true;
+		}
+		else if (!strcmp(argv[argc] , "--kinect"))
+		{
+			drawKinect = true;
+		}
+		else if (!strcmp(argv[argc] , "--data"))
+		{
+			drawData = true;
+		}
+		else
+		{
+			printf ("The following argument is invalid %s.\n", argv[argc]);
+			exit(1);
+		}
+
+	} 
+	if (drawInStereo && comp != COMP_SUTHERLAND)
 	{
-		std::cout << "No devices found." << std::endl;
-		return -1;
+		drawInStereo = false;
+	}
+	if (useTNG && comp != COMP_SUTHERLAND)
+	{
+		useTNG = false;
 	}
 	
-	printf("Number of devices connected: %d.\n", i);
+	if (comp == COMP_SUTHERLAND || usePhantom || useTNG)
+	{
+		useTracker = true;
+	}
+	if (drawKinect)
+	{
+		devMan = new DeviceManager();
+		
+		unsigned int i = devMan->GetNODevicesConnected();
+		
+		if (i < 1)
+		{
+			std::cout << "No devices found." << std::endl;
+			return -1;
+		}
+		
+		printf("Number of devices connected: %d.\n", i);
+	}
 	//VTK Pipeline
 	vtkRenderer* ren = vtkRenderer::New();
 	ren->GetActiveCamera()->ParallelProjectionOff();
@@ -769,7 +847,7 @@ int main(int argc, char** argv)
 	vtkRenderWindowInteractor* data_iren = vtkRenderWindowInteractor::New();
  
 	
-	if (KINECT_SET_STEREO_ON)
+	if (drawInStereo)
 	{
 		renwin->SetStereoCapableWindow(1);
 		renwin->StereoRenderOn();
@@ -791,9 +869,9 @@ int main(int argc, char** argv)
 	double initialbounds [6] = {1,-1,1,-1,1,-1};
 	ren->ResetCamera(initialbounds);
 	dataren->ResetCamera(initialbounds);
-	if (USE_TNG)
+	if (useTNG)
 		initializeTNG();
-	if (USE_TRACKER)
+	if (useTracker)
 		initializeTracker(); 
 	
 	   
@@ -803,7 +881,10 @@ int main(int argc, char** argv)
 	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
 	iren->CreateRepeatingTimer(TIMER_LENGTH); 
 	
-	devMan->GetCameraDataForAllDevices(cameraDataVector); 
+	if (drawKinect)
+	{
+		devMan->GetCameraDataForAllDevices(cameraDataVector); 
+	}
 	updatePolyData();  
 	
 	ren->GetActiveCamera()->SetPosition(0,0,3.34); 
@@ -826,7 +907,8 @@ int main(int argc, char** argv)
         DispatchMessage(&msg);
        
     }
-	delete devMan;
+	if (drawKinect)
+		delete devMan;
 	
 	return 0;
 }
