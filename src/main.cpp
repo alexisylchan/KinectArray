@@ -58,7 +58,7 @@
 #define PIXEL_SCALE 2 
  
 #define TIMER_LENGTH 1
-
+#define MOCK_HEAD 0
 #define COMP_SUTHERLAND 0
 #define COMP_GAMMA9 1
 #define COMPUTE_KINECT_BOUNDS 0
@@ -222,6 +222,7 @@ void createConeS(bool deleteOldCone)
 	ConeActorS = vtkActor::New();
     ConeActorS->SetMapper(ConeMapper); 
 	ConeActorS->SetPosition(position); 
+	ConeActorS->GetProperty()->SetColor(0.5,0.5,0);
 	ConeActorS->UseBoundsOff();
 	ConeActorS->Modified();
  	vtkRenderer* renderer1 = datawin->GetRenderers()->GetFirstRenderer();
@@ -361,7 +362,7 @@ void updatePolyData()
 		extrinsicMat->SetElement(2,3,52.6665); 
 
 		 		
-		coordsLog = fopen("coordslog-posttransformedbounds2.txt","w");
+		coordsLog = fopen("coordslog-posttransformedbounds5.txt","w");
 		}
 
 	for(unsigned int i = 0; i < cameraDataVector.size(); i++)
@@ -421,7 +422,7 @@ void updatePolyData()
 					 extrinsicMat->MultiplyPoint(pixPos,transformedPixPos);  
 					transformedPixPos[0] = pixPos[0]/(fov.fHFOV/2.0) ; 
 					transformedPixPos[1] = pixPos[1]/(fov.fVFOV/2.0); 
-					transformedPixPos[2] = d/(devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetDeviceMaxDepth()/2.0); 
+					transformedPixPos[2] = COMPUTE_KINECT_BOUNDS ? d: d/(devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetDeviceMaxDepth()/2.0); 
 					transformedPixPos[3] = 0;  
 	
 					if ( COMPUTE_KINECT_BOUNDS && first )
@@ -443,9 +444,9 @@ void updatePolyData()
 					 zMax 1.056400, zMin 0.000000, 
 					 wMax 0.000000, wMin 0.000000*/
 
-					transformedPixPos[0] = transformedPixPos[0]/((2516.280273 + 1051.145264)/2.0);
-					transformedPixPos[1] = transformedPixPos[1]/((2277.582031 + 416.293884)/2.0);
-					transformedPixPos[2] = transformedPixPos[2]/((0.000000 + 4406.604004)/2.0);
+					transformedPixPos[0] = transformedPixPos[0]/((1507.638916   + 4345.924316  )/2.0);
+					transformedPixPos[1] = transformedPixPos[1]/((1981.828125   + 3764.186279)/2.0);
+					transformedPixPos[2] = transformedPixPos[2]/((4093.000000 + 0)/2.0);
 
 					if ( /*d == 0  || */ (cullDepth && d > 1000))/*(d == 0)*/
 					{
@@ -527,7 +528,10 @@ void initializeTracker()
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 	if (comp == COMP_SUTHERLAND)
 	{
-		trackerAddress =  "tracker@localhost";//"Tracker0@tracker1-cs.cs.unc.edu";
+		if (MOCK_HEAD)
+			trackerAddress =  "tracker@localhost";//
+		else
+			trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
 	}
 	else if (comp == COMP_GAMMA9)
 	{
@@ -781,7 +785,7 @@ int main(int argc, char** argv)
 				exit(1);
 			}
 		}
-		else if (!strcmp(argv[argc] , "--drawInStereo"))
+		else if (!strcmp(argv[argc] , "--stereo"))
 		{
 			drawInStereo = true;
 		}
@@ -890,12 +894,11 @@ int main(int argc, char** argv)
 	}
 	updatePolyData();  
 	
-	ren->GetActiveCamera()->SetPosition(0,0,3.34); 
+	ren->GetActiveCamera()->SetPosition(0,0,0.3); 
 	ren->GetActiveCamera()->Roll(180.0);
 	ren->GetActiveCamera()->Azimuth(180.0);
 
 	ren->GetActiveCamera()->Modified();    
-
 	printf("rencamdis %f",dataren->GetActiveCamera()->GetDistance());
 	printf("renviewangle %f",dataren->GetActiveCamera()->GetViewAngle()); 
 	printf("camdis %f",dataren->GetActiveCamera()->GetDistance());
