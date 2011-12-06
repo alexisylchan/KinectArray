@@ -330,14 +330,14 @@ void updatePolyData()
 		{
 
 		intrinsicMat = vtkMatrix4x4::New();
-		intrinsicMat->SetElement(0,0,526.392);
+		intrinsicMat->SetElement(0,0,525.844);
 		intrinsicMat->SetElement(0,1,0);
-		intrinsicMat->SetElement(0,2,312.472); 
+		intrinsicMat->SetElement(0,2,312.569); 
 		intrinsicMat->SetElement(0,3,0); 
 
 		intrinsicMat->SetElement(1,0,0);
-		intrinsicMat->SetElement(1,1,527.405);
-		intrinsicMat->SetElement(1,2,255.377); 
+		intrinsicMat->SetElement(1,1,527.421);
+		intrinsicMat->SetElement(1,2,252.614); 
 		intrinsicMat->SetElement(1,3,0); 
 
 		intrinsicMat->SetElement(2,0,0);
@@ -345,20 +345,20 @@ void updatePolyData()
 		intrinsicMat->SetElement(2,2,1); 
 		intrinsicMat->SetElement(2,3,0); 
 		extrinsicMat = vtkMatrix4x4::New();
-		extrinsicMat->SetElement(0,0,-0.997265);
-		extrinsicMat->SetElement(0,1,0.0703081);
-		extrinsicMat->SetElement(0,2,-0.0228026); 
-		extrinsicMat->SetElement(0,3,22.2783); 
+		extrinsicMat->SetElement(0,0,-0.96094);
+		extrinsicMat->SetElement(0,1,0.0781025);
+		extrinsicMat->SetElement(0,2,0.265509); 
+		extrinsicMat->SetElement(0,3,14.412); 
 
-		extrinsicMat->SetElement(1,0,-0.0731928);
-		extrinsicMat->SetElement(1,1,-0.982345);
-		extrinsicMat->SetElement(1,2,0.172164); 
-		extrinsicMat->SetElement(1,3,5.21535); 
+		extrinsicMat->SetElement(1,0,-0.0805999);
+		extrinsicMat->SetElement(1,1,-0.996745);
+		extrinsicMat->SetElement(1,2,0.00149397); 
+		extrinsicMat->SetElement(1,3,16.1328); 
 
-		extrinsicMat->SetElement(2,0,-0.0102955);
-		extrinsicMat->SetElement(2,1,0.173362);
-		extrinsicMat->SetElement(2,2,0.984804); 
-		extrinsicMat->SetElement(2,3,78.0203); 
+		extrinsicMat->SetElement(2,0,264762);
+		extrinsicMat->SetElement(2,1,-0.0199644);
+		extrinsicMat->SetElement(2,2,0.964107); 
+		extrinsicMat->SetElement(2,3,52.6665); 
 
 		 		
 		coordsLog = fopen("coordslog-posttransformedbounds2.txt","w");
@@ -527,7 +527,7 @@ void initializeTracker()
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 	if (comp == COMP_SUTHERLAND)
 	{
-		trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
+		trackerAddress =  "tracker@localhost";//"Tracker0@tracker1-cs.cs.unc.edu";
 	}
 	else if (comp == COMP_GAMMA9)
 	{
@@ -546,8 +546,11 @@ void initializeTracker()
 	sensorIndex = 0; 
 	origSensorIndex = 0;
  
-	initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
-	initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	if (comp == COMP_SUTHERLAND)
+	{
+		initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+		initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	}
 	initializeDevices( ); 
 }
 
