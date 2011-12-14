@@ -52,25 +52,25 @@
 
 #include "vtkVRPNPhantom.h"
 #include "vtkVRPNPhantomStyleCamera.h"
-
+#include "vtkMatrix4x4.h"
 #define S_WIDTH 640
 #define S_HEIGHT 480
-#define PIXEL_SCALE 2
-#define USE_TRACKER 1
-#define USE_HEAD_TRACKER 0
-#define RESET_CAMERA 1
-#define TRACKER_UPDATE_CONE_POS 0
+#define PIXEL_SCALE 2 
+ 
 #define TIMER_LENGTH 1
+#define MOCK_HEAD 0
+#define COMP_SUTHERLAND 0
+#define COMP_GAMMA9 1
+#define COMPUTE_KINECT_BOUNDS 0
+int comp = -1;
 
-#define DRAW_CUBE 1
-
-#define DRAW_KINECT 0 
-
-#define CULL_DEPTH 0
-#define KINECT_SET_STEREO_ON 0
-#define USE_TNG 0
-#define USE_PHANTOM 1
-
+bool drawData = false;
+bool drawKinect = false;
+bool cullDepth = false;
+bool useTNG = false;
+bool usePhantom = false;
+bool drawInStereo = false;
+bool useTracker = false;
 
 struct vtkRenderGroup
 {
@@ -84,8 +84,9 @@ std::vector<CameraDataPacket> cameraDataVector;
 std::vector<vtkRenderGroup> renderGroups;
 vtkRenderWindow* renwin  ;
 vtkRenderWindow* datawin  ;
-// Headtracking
-  int useTracker;
+
+
+// Headtracking 
   const char* trackerAddress;
   double trackerOrigin[3];
   int sensorIndex;
@@ -94,23 +95,38 @@ vtkRenderWindow* datawin  ;
   vtkDeviceInteractor* inputInteractor;
 
   //Need to reset renderer to handle load state
-  vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera1;
-  vtkVRPNTrackerCustomSensorStyleCamera*  trackerStyleCamera2;
+  vtkVRPNTrackerCustomSensorStyleCamera*  kinectTrackerStyleCamera;
+  vtkVRPNTrackerCustomSensorStyleCamera*  sciDataStyleCamera;
   vtkVRPNTrackerCustomSensor* tracker1; 
 
-  vtkVRPNPhantomStyleCamera* phantomStyleCamera1;
+  //Phantom
+  vtkVRPNPhantomStyleCamera* phantomStyleCameraS;
+  vtkVRPNPhantomStyleCamera* phantomStyleCameraG;
 	 
 	bool first = true;
-	vtkActor* ConeActor;
-	vtkConeSource* Cone;
+	
+ 
+	vtkActor* ConeActorS;
+	vtkConeSource* ConeS;
+
+	
+	vtkActor* ConeActorG;
+	vtkConeSource* ConeG;
+
+
+	//Replace with data set
 	vtkActor* CubeActor;
 	vtkCubeSource* CubeSource;
-
-	vtkMatrix4x4* kinectTransform;
+ 
+	vtkMatrix4x4* intrinsicMat;
+	vtkMatrix4x4* extrinsicMat;
+	vtkMatrix4x4* rotate180YOpenNI;
 
 	vtkLight* MainLight;
 	vtkLightKit* LightKit;
 
+	
+	FILE* coordsLog;
 	vrpn_Analog_Remote* tng1;
 	
 	class tng_user_callback
@@ -155,7 +171,7 @@ void updatePolyData();
 void timerCallback();
 
   
-void createCone(bool deleteOldCone)
+void createConeS(bool deleteOldCone)
 {
 	
 	double position[3] = {-0.000033, -0.065609, -0.087861};
@@ -164,8 +180,8 @@ void createCone(bool deleteOldCone)
 		double orientNew[3] ;
 		if (deleteOldCone)
 		{
-			ConeActor->Delete();
-			Cone->Delete();
+			ConeActorS->Delete();
+			ConeS->Delete();
 		}
 		 
 		vtkMatrix4x4* cameraLightTransformMatrix = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
@@ -194,24 +210,113 @@ void createCone(bool deleteOldCone)
 		vtkTransform::GetOrientation(orientNew,RotationMatrix); 
  
 	// ConeSource
-    Cone = vtkConeSource::New(); 
-	Cone->SetRadius(0.05);
-	Cone->SetHeight(0.1);  
-	Cone->SetDirection(orientNew); 
+    ConeS = vtkConeSource::New(); 
+	ConeS->SetRadius(0.05);
+	ConeS->SetHeight(0.1);  
+	ConeS->SetDirection(orientNew); 
 
-	//Cone Mapper
+	//ConeS Mapper
     vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
-	ConeMapper->SetInput(Cone->GetOutput());
+	ConeMapper->SetInput(ConeS->GetOutput());
     
-	ConeActor = vtkActor::New();
-    ConeActor->SetMapper(ConeMapper); 
-	ConeActor->SetPosition(position); 
-	ConeActor->UseBoundsOff();
-	ConeActor->Modified();
+	ConeActorS = vtkActor::New();
+    ConeActorS->SetMapper(ConeMapper); 
+	ConeActorS->SetPosition(position); 
+	ConeActorS->GetProperty()->SetColor(0.5,0.5,0);
+	ConeActorS->UseBoundsOff();
+	ConeActorS->Modified();
  	vtkRenderer* renderer1 = datawin->GetRenderers()->GetFirstRenderer();
-	renderer1->AddActor(ConeActor);
+	renderer1->AddActor(ConeActorS);
 
-	Cone->Delete(); 
+	ConeS->Delete(); 
+	ConeMapper->Delete();
+
+
+}
+
+
+
+
+void createConeG(bool deleteOldCone)
+{ /*
+
+ origin
+ -0.018600 -0.117373 -0.054196 -0.083124 -0.111811 -0.011647  0.990178
+ nearz
+ -0.017090  0.005544  0.003920 -0.038565 -0.169748 -0.312001  0.933999
+ farz
+ -0.048872  0.073774  0.125514 -0.097257 -0.139057 -0.300971  0.938414
+ topy
+ -0.029943  0.202331  0.001229 -0.082207 -0.131866 -0.270780  0.950016
+ bottomy
+ -0.038055 -0.085279  0.038467 -0.131727 -0.232748 -0.324240  0.907383
+ leftx
+ -0.208597  0.085714 -0.033738 -0.181448 -0.225020 -0.130362  0.948392
+ rightx
+  0.165684  0.067863  0.041129  0.002439 -0.201601 -0.061625  0.977524*/
+
+
+
+	double position[3] = {-0.018600, -0.117373, -0.054196};//{0.002582 , -0.059024 , -0.096408 };
+	double quat[4] = { -0.083124, -0.111811, -0.011647,  0.990178};
+	/*double quat[4] = { -0.19  ,0.05 , 0.95  , 0.26};*/
+
+	//	double position[3] = {0.001167, -0.002429, -0.078878};//{0.002582 , -0.059024 , -0.096408 };
+	//double quat[4] = { 0.035031  ,-0.118583 , 0.930093  , 0.345887};
+	    double  matrix[3][3];
+		double orientNew[3] ;
+		if (deleteOldCone)
+		{
+			ConeActorG->Delete();
+			ConeG->Delete();
+		}
+		 
+		vtkMatrix4x4* cameraLightTransformMatrix = datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera()->GetCameraLightTransformMatrix(); 
+		cameraLightTransformMatrix->MultiplyPoint(position,position); 
+		// Update Object Orientation
+
+		//Change transform quaternion to matrix
+		vtkMath::QuaternionToMatrix3x3(quat, matrix); 
+		vtkMatrix4x4* RotationMatrix = vtkMatrix4x4::New();
+		RotationMatrix->SetElement(0,0, matrix[0][0]);
+		RotationMatrix->SetElement(0,1, matrix[0][1]);
+		RotationMatrix->SetElement(0,2, matrix[0][2]); 
+		RotationMatrix->SetElement(0,3, 0.0); 
+		
+		RotationMatrix->SetElement(1,0, matrix[1][0]);
+		RotationMatrix->SetElement(1,1, matrix[1][1]);
+		RotationMatrix->SetElement(1,2, matrix[1][2]); 
+		RotationMatrix->SetElement(1,3, 0.0); 
+		
+		RotationMatrix->SetElement(2,0, matrix[2][0]);
+		RotationMatrix->SetElement(2,1, matrix[2][1]);
+		RotationMatrix->SetElement(2,2, matrix[2][2]); 
+		RotationMatrix->SetElement(2,3, 1.0); 
+
+		//cameraLightTransformMatrix->Multiply4x4(cameraLightTransformMatrix,RotationMatrix,RotationMatrix); 
+		vtkTransform::GetOrientation(orientNew,RotationMatrix); 
+ 
+	// ConeSource
+    ConeG = vtkConeSource::New(); 
+	ConeG->SetRadius(0.05);
+	ConeG->SetHeight(0.1);  
+	ConeG->SetDirection(orientNew); 
+
+	//ConeG Mapper
+    vtkPolyDataMapper* ConeMapper = vtkPolyDataMapper::New();
+	ConeMapper->SetInput(ConeG->GetOutput());
+    
+	ConeActorG = vtkActor::New();
+    ConeActorG->SetMapper(ConeMapper); 
+	ConeActorG->SetPosition(position); 
+	ConeActorG->GetProperty()->SetColor(0,0.5,0.5);
+	 
+	ConeActorG->UseBoundsOff();
+	ConeActorG->Modified();
+ 	vtkRenderer* renderer1 = datawin->GetRenderers()->GetFirstRenderer();
+	renderer1->AddActor(ConeActorG);
+
+	ConeG->Delete(); 
 	ConeMapper->Delete();
 
 
@@ -219,36 +324,68 @@ void createCone(bool deleteOldCone)
 
 
 void updatePolyData()
-{
-	/*if (USE_PHANTOM)
-	{ 
-		createCone(false);
-	}*/
-	if (DRAW_CUBE )
+{ 
+	if (drawData )
 	{
 		if (first)
 		{
 			 double position[3] = {0, 0, 0};  
-			CubeSource = vtkCubeSource::New(); 
-			//Cone->SetDirection(orientNew); 
+			CubeSource = vtkCubeSource::New();  
 
-			//Cone Mapper
+			//ConeS Mapper
 			vtkPolyDataMapper* CubeMapper = vtkPolyDataMapper::New();
 			CubeMapper->SetInput(CubeSource->GetOutput());
 		    
 			CubeActor = vtkActor::New();
 			CubeActor->SetMapper(CubeMapper); 
 			CubeActor->SetPosition(position); 
-			CubeActor->GetProperty()->SetOpacity(0.5);
+			//CubeActor->GetProperty()->SetOpacity(0.5);
 	  
 			datawin->GetRenderers()->GetFirstRenderer()->AddActor(CubeActor); 
 			datawin->GetRenderers()->GetFirstRenderer()->ResetCamera();
-			first = false;
 		}
 	 
 	}
-	if (DRAW_KINECT)
+	if (drawKinect)
 	{
+		if (first)
+		{
+
+		intrinsicMat = vtkMatrix4x4::New();
+		intrinsicMat->SetElement(0,0,525.844);
+		intrinsicMat->SetElement(0,1,0);
+		intrinsicMat->SetElement(0,2,312.569); 
+		intrinsicMat->SetElement(0,3,0); 
+
+		intrinsicMat->SetElement(1,0,0);
+		intrinsicMat->SetElement(1,1,527.421);
+		intrinsicMat->SetElement(1,2,252.614); 
+		intrinsicMat->SetElement(1,3,0); 
+
+		intrinsicMat->SetElement(2,0,0);
+		intrinsicMat->SetElement(2,1,0);
+		intrinsicMat->SetElement(2,2,1); 
+		intrinsicMat->SetElement(2,3,0); 
+		extrinsicMat = vtkMatrix4x4::New();
+		extrinsicMat->SetElement(0,0,-0.96094);
+		extrinsicMat->SetElement(0,1,0.0781025);
+		extrinsicMat->SetElement(0,2,0.265509); 
+		extrinsicMat->SetElement(0,3,14.412); 
+
+		extrinsicMat->SetElement(1,0,-0.0805999);
+		extrinsicMat->SetElement(1,1,-0.996745);
+		extrinsicMat->SetElement(1,2,0.00149397); 
+		extrinsicMat->SetElement(1,3,16.1328); 
+
+		extrinsicMat->SetElement(2,0,264762);
+		extrinsicMat->SetElement(2,1,-0.0199644);
+		extrinsicMat->SetElement(2,2,0.964107); 
+		extrinsicMat->SetElement(2,3,52.6665); 
+
+		 		
+		coordsLog = fopen("coordslog-posttransformedbounds5.txt","w");
+		}
+
 	for(unsigned int i = 0; i < cameraDataVector.size(); i++)
 	{
 	
@@ -286,55 +423,72 @@ void updatePolyData()
 		for(int y = 0; y < S_HEIGHT; y++)
 		{
 			for(int x = 0; x < S_WIDTH; x++)
-			{
-
-				if (!RESET_CAMERA)
-				{
+			{ 
 					XnDepthPixel d = cameraDataVector[i].depthMap_[x+y*S_WIDTH];
 					XnRGB24Pixel c = cameraDataVector[i].imageMap_[x+y*S_WIDTH];
 		
 					vtkIdType id;
 
-					double pixPos[3];
-					pixPos[0] = ((double)x)/100.0; pixPos[1] = ((double)y)/100.0; pixPos[2] = d*0.001-1.0;
+					double pixPos[4];
+					XnFieldOfView fov;
 					
-					if (d == 0  || (CULL_DEPTH && d > 2000))/*(d == 0)*/
+					devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetFieldOfView(fov); 
+
+					pixPos[0] = ((x - intrinsicMat->GetElement(0,2))*d)/intrinsicMat->GetElement(0,0) ; 
+					pixPos[1] = ((y - intrinsicMat->GetElement(1,2))*d)/intrinsicMat->GetElement(1,1); 
+					pixPos[2] = d; 
+					pixPos[3] = 0;
+					double transformedPixPos[4];
+				 
+					 extrinsicMat->MultiplyPoint(pixPos,transformedPixPos);  
+					transformedPixPos[0] = pixPos[0]/(fov.fHFOV/2.0) ; 
+					transformedPixPos[1] = pixPos[1]/(fov.fVFOV/2.0); 
+					transformedPixPos[2] = COMPUTE_KINECT_BOUNDS ? d: d/(devMan->GetDeviceByIndex(0)->GetDepthGenerator()->GetDeviceMaxDepth()/2.0); 
+					transformedPixPos[3] = 0;  
+	
+					if ( COMPUTE_KINECT_BOUNDS && first )
 					{
-						id = points->InsertNextPoint(pixPos[0],pixPos[1],-1.0);
+						
+
+						fprintf(coordsLog,"%f , %f , %f, %f\n",transformedPixPos[0],transformedPixPos[1],transformedPixPos[2],transformedPixPos[3]);
+					}  
+
+					 
+					/*scale 
+					xMax 2516.280273 , xMin -1051.145264 , 
+					yMax 2277.582031 , yMin -416.293884, 
+					zMax 0.000000, zMin -4406.604004, 
+					wMax 0.000000, wMin 0.000000*/
+						/*scale 2
+					 xMax 2104.453125 , xMin -4754.977539 
+					 yMax 2113.515137 , yMin -5464.675781, 
+					 zMax 1.056400, zMin 0.000000, 
+					 wMax 0.000000, wMin 0.000000*/
+
+					transformedPixPos[0] = transformedPixPos[0]/((1507.638916   + 4345.924316  )/2.0);
+					transformedPixPos[1] = transformedPixPos[1]/((1981.828125   + 3764.186279)/2.0);
+					transformedPixPos[2] = transformedPixPos[2]/((4093.000000 + 0)/2.0);
+
+					if ( /*d == 0  || */ (cullDepth && d > 1000))/*(d == 0)*/
+					{
+						id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],-1.0); 
 						color->InsertNextTuple3(0,0,0);
 					}
 					else  
 					{
-						id = points->InsertNextPoint(pixPos[0],pixPos[1],pixPos[2]);
+				 		id = points->InsertNextPoint(transformedPixPos[0],transformedPixPos[1],transformedPixPos[2]); 
 						color->InsertNextTuple3(c.nRed, c.nGreen, c.nBlue);
+						
 					}
 		
 					cellArray->InsertNextCell(1);
-					cellArray->InsertCellPoint(id);
-				}
-				else
-				{
-					XnDepthPixel d = cameraDataVector[i].depthMap_[x+y*S_WIDTH];
-					XnRGB24Pixel c = cameraDataVector[i].imageMap_[x+y*S_WIDTH];
-		
-					vtkIdType id;
-					if (d == 0  || (CULL_DEPTH && d > 2000))/*(d == 0)*/
-					{
-						id = points->InsertNextPoint(x,y,4096*.3);
-						color->InsertNextTuple3(0,0,0);
-					}
-					else  
-					{
-						id = points->InsertNextPoint(x*PIXEL_SCALE,y*PIXEL_SCALE,/*d*0.001*/d*.3);
-						color->InsertNextTuple3(c.nRed, c.nGreen, c.nBlue);
-					}
-		
-					cellArray->InsertNextCell(1);
-					cellArray->InsertCellPoint(id);
-				}
+					cellArray->InsertCellPoint(id); 
 			}
 		}
-	
+		if (first)
+		{
+			fclose(coordsLog);
+		}
 		renderGroups[i].polyData_->SetPoints(points);
 		renderGroups[i].polyData_->SetVerts(cellArray);
 		renderGroups[i].polyData_->GetPointData()->SetScalars(color);
@@ -342,6 +496,8 @@ void updatePolyData()
 		renderGroups[i].polyData_->Update();
 	}
 }
+
+			first = false;
 }
 
 class UpdateData:public vtkCommand
@@ -354,18 +510,18 @@ class UpdateData:public vtkCommand
 		}
 		virtual void Execute(vtkObject* caller, unsigned long eid, void* clientdata)
 		{ 
-			if (USE_TNG)
+			if (useTNG)
 			{
 				tng1->mainloop();
 			}
-		    if (USE_TRACKER)
+		    if (useTracker)
 			{
 				inputInteractor->Update(); 
 			}
 			
-			if (DRAW_KINECT)
+		 	if (drawKinect)
 			{
-		 		devMan->GetCameraDataForAllDevices(cameraDataVector);
+				devMan->GetCameraDataForAllDevices(cameraDataVector);
 			}
 			updatePolyData();   
 			renwin->Render();
@@ -391,8 +547,21 @@ void initializeTracker()
 	useTracker = 1;
 
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
-	//trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
-	trackerAddress =  "tracker@1";//
+	if (comp == COMP_SUTHERLAND)
+	{
+		if (MOCK_HEAD)
+			trackerAddress =  "tracker@localhost";//
+		else
+			trackerAddress =  "Tracker0@tracker1-cs.cs.unc.edu";
+	}
+	else if (comp == COMP_GAMMA9)
+	{
+		trackerAddress =  "tracker@gamma9.cs.unc.edu"; 
+	}
+	else
+	{
+		trackerAddress = "tracker@1";
+	}
 	/********************** CHANGE THE SENSOR INDEX WHEN CHANGING THE HOST ********************/
 
 	trackerOrigin[0] =  -7.88;
@@ -402,8 +571,11 @@ void initializeTracker()
 	sensorIndex = 0; 
 	origSensorIndex = 0;
  
-	initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
-	initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	if (comp == COMP_SUTHERLAND)
+	{
+		initializeEyeAngle( renwin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+		initializeEyeAngle( datawin->GetRenderers()->GetFirstRenderer()->GetActiveCamera() );
+	}
 	initializeDevices( ); 
 }
 
@@ -515,8 +687,6 @@ void initializeDevices()
     inputInteractor = vtkDeviceInteractor::New();
 		/////////////////////////CREATE  TRACKER////////////////////////////
 
-		if (USE_HEAD_TRACKER)
-		{
 		//Create connection to VRPN Tracker using vtkInteractionDevice.lib
 		tracker1 = vtkVRPNTrackerCustomSensor::New();
 		tracker1->SetDeviceName(trackerAddress); 
@@ -539,78 +709,173 @@ void initializeDevices()
 		/////////////////////////CREATE  TRACKER STYLE////////////////////////////
 
 		//Create device interactor style (defined in vtkInteractionDevice.lib) that determines how the device manipulates camera viewpoint
-		trackerStyleCamera1 = vtkVRPNTrackerCustomSensorStyleCamera::New();
-		trackerStyleCamera1->SetTracker(tracker1);
-		trackerStyleCamera1->SetRenderer(renwin->GetRenderers()->GetFirstRenderer());
+		kinectTrackerStyleCamera = vtkVRPNTrackerCustomSensorStyleCamera::New();
+		kinectTrackerStyleCamera->SetTracker(tracker1);
+		kinectTrackerStyleCamera->SetRenderer(renwin->GetRenderers()->GetFirstRenderer());
 			//Create device interactor style (defined in vtkInteractionDevice.lib) that determines how the device manipulates camera viewpoint
-		trackerStyleCamera2 = vtkVRPNTrackerCustomSensorStyleCamera::New();
-		trackerStyleCamera2->SetTracker(tracker1);
-		trackerStyleCamera2->SetRenderer(datawin->GetRenderers()->GetFirstRenderer());
+		sciDataStyleCamera = vtkVRPNTrackerCustomSensorStyleCamera::New();
+		sciDataStyleCamera->SetTracker(tracker1);
+		sciDataStyleCamera->SetRenderer(datawin->GetRenderers()->GetFirstRenderer());
 
 	
 		/////////////////////////INTERACTOR////////////////////////////
 		//Register Tracker to Device Interactor
 		inputInteractor->AddInteractionDevice(tracker1);
-		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera1);  
-		inputInteractor->AddDeviceInteractorStyle(trackerStyleCamera2);
-		}
+		inputInteractor->AddDeviceInteractorStyle(kinectTrackerStyleCamera);  
+		inputInteractor->AddDeviceInteractorStyle(sciDataStyleCamera);
+
 		 
-		if (USE_PHANTOM)
+		if (usePhantom)
 		{
-		vtkVRPNPhantom* phantom1 = vtkVRPNPhantom::New();
-		phantom1->SetDeviceName("Phantom0@localhost");
-		phantom1->SetPhantom2WorldTranslation(0.000264,0.065412,0.0);//TODO: FIX
-		phantom1->SetNumberOfButtons(2);
-		phantom1->SetSensorIndex(sensorIndex);
 
-		phantom1->Initialize();
-		createCone(false);
+		
+		/////////////////////////FIRST PHANTOM//////////////////////////// 
+		vtkVRPNPhantom* phantomS = vtkVRPNPhantom::New();
+		phantomS->SetDeviceName("Phantom0@sutherland.cs.unc.edu");
+		phantomS->SetPhantom2WorldTranslation(0.000264,0.065412,0.0);//TODO: FIX
+		phantomS->SetNumberOfButtons(2);
+		phantomS->SetSensorIndex(sensorIndex);
 
+		phantomS->Initialize();
+		createConeS(false);
+ 
+		phantomStyleCameraS = vtkVRPNPhantomStyleCamera::New();   
+		phantomStyleCameraS->SetPhantomType(PHANTOM_TYPE_OMNI);
+		phantomStyleCameraS->SetActor(ConeActorS); 
+		phantomStyleCameraS->SetConeSource(ConeS);
+ 
+		phantomStyleCameraS->SetPhantom(phantomS);
+		phantomStyleCameraS->SetRenderer(datawin->GetRenderers()->GetFirstRenderer());  
+		//Register Phantom to Device Interactor 
+		inputInteractor->AddInteractionDevice(phantomS);
+		inputInteractor->AddDeviceInteractorStyle(phantomStyleCameraS); 
+
+		
+		/////////////////////////SECOND PHANTOM//////////////////////////// 
+		vtkVRPNPhantom* phantomG = vtkVRPNPhantom::New();   
+		phantomG->SetDeviceName("Phantom0@gamma9.cs.unc.edu");
+		phantomG->SetPhantom2WorldTranslation(0.000264,0.065412,0.0);//TODO: FIX
+		phantomG->SetNumberOfButtons(2);
+		phantomG->SetSensorIndex(sensorIndex);
+
+		phantomG->Initialize();
+		createConeG(false); 
 		/////////////////////////CREATE  PHANTOM STYLE////////////////////////////
-		phantomStyleCamera1 = vtkVRPNPhantomStyleCamera::New(); 
+		phantomStyleCameraG = vtkVRPNPhantomStyleCamera::New(); 
+		phantomStyleCameraG->SetPhantomType(PHANTOM_TYPE_DESKTOP);
 		/////////////////////////CONNECT TO SERVER CHANGE////////////////////////////
  
 
-		phantomStyleCamera1->SetActor(ConeActor); 
-		phantomStyleCamera1->SetConeSource(Cone);
+		phantomStyleCameraG->SetActor(ConeActorG); 
+		phantomStyleCameraG->SetConeSource(ConeG);
  
-		phantomStyleCamera1->SetPhantom(phantom1);
-		phantomStyleCamera1->SetRenderer(datawin->GetRenderers()->GetFirstRenderer()); 
+		phantomStyleCameraG->SetPhantom(phantomG);
+		phantomStyleCameraG->SetRenderer(datawin->GetRenderers()->GetFirstRenderer()); 
 
 		
 	    /////////////////////////INTERACTOR////////////////////////////
 		//Register Phantom to Device Interactor 
-		inputInteractor->AddInteractionDevice(phantom1);
-		inputInteractor->AddDeviceInteractorStyle(phantomStyleCamera1); 
+		inputInteractor->AddInteractionDevice(phantomG);
+		inputInteractor->AddDeviceInteractorStyle(phantomStyleCameraG); 
+
 		}
 }
 
 int main(int argc, char** argv)
-{
-	
-	if (DRAW_KINECT)
+{ 
+	while (--argc > 0 )
+	{    
+		if (!strcmp(argv[argc] , "--sutherland"))
+		{
+			
+			if (comp != COMP_GAMMA9)
+				comp = COMP_SUTHERLAND;
+			else
+			{
+				printf ("Error trying to assign app to two computers!");
+				exit(1);
+			} 
+		}
+		else if (!strcmp(argv[argc] , "--gamma9"))
+		{
+			if (comp != COMP_SUTHERLAND)
+				comp = COMP_GAMMA9;
+			else
+			{
+				printf ("Error trying to assign app to two computers!");
+				exit(1);
+			}
+		}
+		else if (!strcmp(argv[argc] , "--stereo"))
+		{
+			drawInStereo = true;
+		}
+		else if (!strcmp(argv[argc] , "--phantom"))
+		{
+			usePhantom = true;
+		}
+		else if (!strcmp(argv[argc] , "--tng"))
+		{
+			useTNG = true;
+		}
+		else if (!strcmp(argv[argc] , "--cull-depth"))
+		{
+			cullDepth = true;
+		}
+		else if (!strcmp(argv[argc] , "--kinect"))
+		{
+			drawKinect = true;
+		}
+		else if (!strcmp(argv[argc] , "--data"))
+		{
+			drawData = true;
+		}
+		else
+		{
+			printf ("The following argument is invalid %s.\n", argv[argc]);
+			exit(1);
+		}
+
+	} 
+	if (drawInStereo && comp != COMP_SUTHERLAND)
 	{
-	devMan = new DeviceManager();
-	
-	unsigned int i = devMan->GetNODevicesConnected();
-	
-	if (i < 1)
+		drawInStereo = false;
+	}
+	if (useTNG && comp != COMP_SUTHERLAND)
 	{
-		std::cout << "No devices found." << std::endl;
-		return -1;
+		useTNG = false;
 	}
 	
-	printf("Number of devices connected: %d.\n", i);
+	if (comp == COMP_SUTHERLAND || usePhantom || useTNG)
+	{
+		useTracker = true;
+	}
+	if (drawKinect)
+	{
+		devMan = new DeviceManager();
+		
+		unsigned int i = devMan->GetNODevicesConnected();
+		
+		if (i < 1)
+		{
+			std::cout << "No devices found." << std::endl;
+			return -1;
+		}
+		
+		printf("Number of devices connected: %d.\n", i);
 	}
 	//VTK Pipeline
-	vtkSmartPointer<vtkRenderer> ren = vtkSmartPointer<vtkRenderer>::New();
-	vtkSmartPointer<vtkRenderer> dataren = vtkSmartPointer<vtkRenderer>::New();
+	vtkRenderer* ren = vtkRenderer::New();
+	ren->GetActiveCamera()->ParallelProjectionOff();
+	vtkRenderer* dataren = vtkRenderer::New();
+	dataren->GetActiveCamera()->ParallelProjectionOff();
 	renwin = vtkRenderWindow::New();
 	datawin= vtkRenderWindow::New();
-	vtkSmartPointer<vtkRenderWindowInteractor> iren = vtkSmartPointer<vtkRenderWindowInteractor>::New();
-	vtkSmartPointer<vtkRenderWindowInteractor> data_iren = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	vtkRenderWindowInteractor* iren = vtkRenderWindowInteractor::New();
+	vtkRenderWindowInteractor* data_iren = vtkRenderWindowInteractor::New();
+ 
 	
-	if (KINECT_SET_STEREO_ON)
+	if (drawInStereo)
 	{
 		renwin->SetStereoCapableWindow(1);
 		renwin->StereoRenderOn();
@@ -624,59 +889,53 @@ int main(int argc, char** argv)
 	iren->Initialize();
 	datawin->AddRenderer(dataren);
 	datawin->SetInteractor(data_iren);
-	datawin->SetSize(1280,800);
+	datawin->SetSize(1920	,1200);
+
 	data_iren->Initialize();
-
-
+	
+	initializeLights();
+	double initialbounds [6] = {1,-1,1,-1,1,-1};
+	ren->ResetCamera(initialbounds);
+	dataren->ResetCamera(initialbounds);
+	if (useTNG)
+		initializeTNG();
+	if (useTracker)
+		initializeTracker(); 
+	
+	   
+	
 	//Add timer callback
 	vtkSmartPointer<UpdateData> updateCallback = vtkSmartPointer<UpdateData>::New();
 	iren->AddObserver(vtkCommand::TimerEvent, updateCallback);
 	iren->CreateRepeatingTimer(TIMER_LENGTH); 
 	
-	initializeLights();
-	if (DRAW_KINECT)
+	if (drawKinect)
 	{
 		devMan->GetCameraDataForAllDevices(cameraDataVector); 
 	}
-	updatePolyData(); 
-
-	if (RESET_CAMERA)
-	{  
-	ren->ResetCamera();
-	ren->GetActiveCamera()->Roll(180.0);
-	ren->GetActiveCamera()->Azimuth(180.0);
-	ren->GetActiveCamera()->Zoom(2.0); 
-	dataren->ResetCamera();
-	}
-	else
-	{
-	ren->GetActiveCamera()->Roll(180.0);
-	ren->GetActiveCamera()->Azimuth(180.0);
-	ren->GetActiveCamera()->SetPosition(0,0,6.69);
-	ren->GetActiveCamera()->Modified();
-
+	updatePolyData();  
 	
-	dataren->GetActiveCamera()->Roll(180.0);
-	dataren->GetActiveCamera()->Azimuth(180.0);
-	dataren->GetActiveCamera()->SetPosition(0,0,6.69);
-	dataren->GetActiveCamera()->Modified();
-	} 
+	/*ren->GetActiveCamera()->SetPosition(0,0,0.3); 
+	ren->GetActiveCamera()->Roll(180.0);
+	ren->GetActiveCamera()->Azimuth(180.0);
+
+	ren->GetActiveCamera()->Modified();    */
+	printf("rencamdis %f",dataren->GetActiveCamera()->GetDistance());
+	printf("renviewangle %f",dataren->GetActiveCamera()->GetViewAngle()); 
+	printf("camdis %f",dataren->GetActiveCamera()->GetDistance());
+	printf("viewangle %f",dataren->GetActiveCamera()->GetViewAngle());
 	 
-	   
-	if (USE_TNG)
-		initializeTNG();
-	if (USE_TRACKER)
-			initializeTracker(); 
+
 	// Continue  interacting
   MSG msg;
     while (1) {
         PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
         TranslateMessage(&msg);
         DispatchMessage(&msg);
-
        
     }
-	delete devMan;
+	if (drawKinect)
+		delete devMan;
 	
 	return 0;
 }
